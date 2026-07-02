@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { issueAPI } from '../../services/apiClient';
+import { issueAPI, userAPI } from '../../services/apiClient';
 import { useFetch, useMutation } from '../../hooks/useAPI';
 
 const initialForm = {
   judul: '',
   deskripsi: '',
+  area: '',
   alamat: '',
   latitude: '',
   longitude: '',
@@ -29,9 +30,14 @@ const statusStyles = {
   default: 'border-slate-200 bg-slate-50 text-slate-600',
 };
 
+
 export default function IssuesPage() {
   const { data, loading, error, refetch } = useFetch(issueAPI.getAll);
   const { mutate, loading: creating, error: createError } = useMutation(issueAPI.create);
+  const {
+    data: areaData,
+    refetch: refetchArea,
+  } = useFetch(userAPI.getAreas);
 
   const [form, setForm] = useState(initialForm);
   const [message, setMessage] = useState('');
@@ -39,6 +45,7 @@ export default function IssuesPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
+  const [areaFilter, setAreaFilter] = useState('all');
 
   const issues = useMemo(() => data?.data || [], [data]);
 
@@ -55,11 +62,13 @@ export default function IssuesPage() {
       { label: 'Selesai', value: done, detail: 'Sudah terselesaikan', tone: 'bg-emerald-500' },
     ];
   }, [issues]);
-
+ 
   const statusOptions = useMemo(() => {
     const statuses = issues.map((issue) => issue.status).filter(Boolean);
     return [...new Set(statuses)];
   }, [issues]);
+
+  const areaOptions = areaData?.data || [];
 
   const filteredIssues = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -70,15 +79,32 @@ export default function IssuesPage() {
       const address = issue.alamat || issue.address || '';
       const status = normalize(issue.status || 'unknown');
       const priority = normalize(issue.priority || 'standar');
-      const searchable = `${title} ${description} ${address} ${status} ${priority}`.toLowerCase();
+      const area = issue.area || '';
+      const matchesArea =
+        areaFilter === 'all' || area === areaFilter;
+      const searchable = `
+      ${title}
+      ${description}
+      ${address}
+      ${area}
+      ${status}
+      ${priority}
+      `
+        .toLowerCase()
+        .trim();
 
       const matchesSearch = !keyword || searchable.includes(keyword);
       const matchesStatus = statusFilter === 'all' || status === normalize(statusFilter);
       const matchesPriority = priorityFilter === 'all' || priority === priorityFilter;
 
-      return matchesSearch && matchesStatus && matchesPriority;
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesPriority &&
+        matchesArea
+      );
     });
-  }, [issues, priorityFilter, search, statusFilter]);
+  }, [issues, priorityFilter, search, statusFilter, areaFilter]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -92,6 +118,7 @@ export default function IssuesPage() {
     const payload = {
       judul: form.judul,
       deskripsi: form.deskripsi,
+      area: form.area,
       alamat: form.alamat || undefined,
       latitude: form.latitude ? Number(form.latitude) : undefined,
       longitude: form.longitude ? Number(form.longitude) : undefined,
@@ -107,6 +134,7 @@ export default function IssuesPage() {
       setMessageType('success');
       setMessage('Gangguan berhasil dibuat.');
       refetch();
+      refetchArea();
     } catch (err) {
       setMessageType('error');
       setMessage(err?.message || 'Gagal membuat gangguan.');
@@ -125,6 +153,11 @@ export default function IssuesPage() {
       setMessageType('error');
       setMessage(err?.message || 'Gagal memperbarui status.');
     }
+  };
+
+  const handleRefresh = () => {
+    refetch();
+    refetchArea();
   };
 
   return (
@@ -165,11 +198,11 @@ export default function IssuesPage() {
               </p>
             </div>
 
-            <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cari judul, alamat, status..."
+                placeholder="Cari judul, area, alamat, status..."
                 className="h-10 min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
               />
               <select
@@ -177,7 +210,7 @@ export default function IssuesPage() {
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="h-10 min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
               >
-                <option value="all">Semua status</option>
+                <option value="all">Status</option>
                 {statusOptions.map((status) => (
                   <option key={status} value={status}>
                     {formatLabel(status)}
@@ -189,13 +222,26 @@ export default function IssuesPage() {
                 onChange={(e) => setPriorityFilter(e.target.value)}
                 className="h-10 min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
               >
-                <option value="all">Semua priority</option>
+                <option value="all">Priority</option>
                 <option value="high">High</option>
                 <option value="medium">Medium</option>
                 <option value="low">Low</option>
               </select>
+              <select
+                value={areaFilter}
+                onChange={(e) => setAreaFilter(e.target.value)}
+                className="h-10 min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="all">Area</option>
+
+                {areaOptions.map((area) => (
+                  <option key={area} value={area}>
+                    {area}
+                  </option>
+                ))}
+              </select>
               <button
-                onClick={refetch}
+                onClick={handleRefresh}
                 className="h-10 w-full rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
               >
                 Refresh
@@ -254,6 +300,30 @@ export default function IssuesPage() {
                 className={inputClass}
                 required
               />
+            </Field>
+
+            <Field label="Area">
+              <select
+                name="area"
+                value={form.area}
+                onChange={handleChange}
+                className={inputClass}
+                required
+                disabled={!areaOptions.length}
+              >
+                <option value="">
+                  {areaOptions.length ? 'Pilih Area' : 'Memuat Area...'}
+                </option>
+
+                {areaOptions.map((area) => (
+                  <option
+                    key={area}
+                    value={area}
+                  >
+                    {area}
+                  </option>
+                ))}
+              </select>
             </Field>
 
             <Field label="Alamat">
@@ -382,7 +452,8 @@ function IssueCard({ issue, onUpdateStatus }) {
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 text-sm text-slate-600 sm:grid-cols-2">
+      <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 text-sm text-slate-600 sm:grid-cols-3">
+        <Meta label="Area" value={issue.area || '-'} />
         <Meta label="Alamat" value={address} />
         <Meta label="Deadline" value={deadline ? formatDate(deadline) : 'Belum ditentukan'} />
       </div>

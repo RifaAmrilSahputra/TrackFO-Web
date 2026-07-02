@@ -26,6 +26,7 @@ export const userAPI = {
   getTechnicians: (params) => api.get('/users/teknisi', { params }),
   getProfile: () => api.get('/users/profile'),
   updateProfile: (userData) => api.put('/users/profile', userData),
+  getAreas: () => api.get('/users/areas'),
 };
 
 // ============= ISSUES / GANGGUAN =============
@@ -109,5 +110,6 @@ export const genericAPI = {
   delete: (endpoint) => api.delete(endpoint),
   patch: (endpoint, data) => api.patch(endpoint, data),
 };
+
 
 export default api;
