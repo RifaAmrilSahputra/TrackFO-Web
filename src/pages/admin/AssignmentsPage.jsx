@@ -1,9 +1,7 @@
 import { useMemo, useState } from 'react';
-import { issueAPI } from '../../services/apiClient';
+import { issueAPI, userAPI } from '../../services/apiClient';
 import { useFetch, useMutation } from '../../hooks/useAPI';
 import { useAuth } from '../../context/AuthContext';
-
-const initialForm = { issueId: '', teknisiIds: '', leaderId: '', method: 'manual' };
 
 const statusStyles = {
   accepted: 'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -17,10 +15,15 @@ const statusStyles = {
 
 export default function AssignmentsPage() {
   const { data, loading, error, refetch } = useFetch(issueAPI.getAll);
-  const { mutate, loading: creating, error: createError } = useMutation((payload) => issueAPI.assignTechnician(payload.issueId, payload.body));
+  const createAssignment = useMutation((payload) => issueAPI.assignTechnician(payload.issueId, payload.body));
+  const technicianRequest = useMutation((params) => userAPI.getTechnicians(params));
   const auth = useAuth();
 
-  const [form, setForm] = useState(initialForm);
+  const [selectedIssue, setSelectedIssue] = useState(null);
+  const [method, setMethod] = useState('auto');
+  const [technicians, setTechnicians] = useState([]);
+  const [selectedTechnicianIds, setSelectedTechnicianIds] = useState([]);
+  const [leaderId, setLeaderId] = useState(null);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('success');
   const [search, setSearch] = useState('');
@@ -67,52 +70,68 @@ export default function AssignmentsPage() {
     });
   }, [assignmentFilter, issues, search]);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+  const resetAssignmentState = () => {
+    setSelectedIssue(null);
+    setMethod('auto');
+    setTechnicians([]);
+    setSelectedTechnicianIds([]);
+    setLeaderId(null);
+    createAssignment.reset();
+    technicianRequest.reset();
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const openAssignmentModal = (issue) => {
+    resetAssignmentState();
+    setSelectedIssue(issue);
     setMessage('');
+  };
 
-    if (!form.issueId) {
-      setMessageType('error');
-      setMessage('Issue ID harus diisi.');
+  const handleMethodChange = async (nextMethod) => {
+    setMethod(nextMethod);
+    setSelectedTechnicianIds([]);
+    setLeaderId(null);
+    createAssignment.reset();
+
+    if (nextMethod === 'auto') {
+      setTechnicians([]);
+      technicianRequest.reset();
       return;
     }
 
-    const body = { method: form.method };
+    try {
+      const response = await technicianRequest.mutate({ area: selectedIssue.area });
+      setTechnicians(getCollection(response));
+    } catch {
+      setTechnicians([]);
+    }
+  };
 
-    if (form.method === 'manual') {
-      const ids = form.teknisiIds
-        .split(',')
-        .map((id) => id.trim())
-        .filter(Boolean)
-        .map(Number)
-        .filter((id) => !Number.isNaN(id));
+  const toggleTechnician = (technicianId) => {
+    setSelectedTechnicianIds((currentIds) => {
+      const isSelected = currentIds.includes(technicianId);
+      const nextIds = isSelected ? currentIds.filter((id) => id !== technicianId) : [...currentIds, technicianId];
 
-      if (!ids.length) {
-        setMessageType('error');
-        setMessage('Masukkan minimal satu Teknisi ID untuk method manual.');
-        return;
+      if (nextIds.length <= 1) {
+        setLeaderId(null);
+      } else if (!nextIds.includes(leaderId)) {
+        setLeaderId(nextIds[0]);
       }
 
-      body.teknisiIds = ids;
-      if (form.leaderId) {
-        const leaderId = Number(form.leaderId);
-        if (Number.isNaN(leaderId)) {
-          setMessageType('error');
-          setMessage('Leader ID harus berupa angka jika diisi.');
-          return;
-        }
-        body.leaderId = leaderId;
-      }
+      return nextIds;
+    });
+  };
+
+  const handleCreateAssignment = async () => {
+    const body = { method };
+
+    if (method === 'manual') {
+      body.teknisiIds = selectedTechnicianIds;
+      if (selectedTechnicianIds.length > 1) body.leaderId = leaderId;
     }
 
     try {
-      await mutate({ issueId: form.issueId, body });
-      setForm(initialForm);
+      await createAssignment.mutate({ issueId: selectedIssue.id, body });
+      resetAssignmentState();
       setMessageType('success');
       setMessage('Assignment berhasil dibuat.');
       refetch();
@@ -164,7 +183,9 @@ export default function AssignmentsPage() {
         ))}
       </section>
 
-      <div className="grid min-w-0 gap-6 2xl:grid-cols-[minmax(0,1fr)_380px]">
+      {message && <Alert tone={messageType}>{message}</Alert>}
+
+      <div className="min-w-0">
         <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="flex min-w-0 flex-col gap-4">
             <div className="min-w-0">
@@ -207,78 +228,38 @@ export default function AssignmentsPage() {
             ) : (
               <div className="min-w-0 space-y-4">
                 {filteredIssues.map((issue) => (
-                  <IssueAssignmentCard key={issue.id} issue={issue} auth={auth} onStatusUpdate={handleStatusUpdate} />
+                  <IssueAssignmentCard
+                    key={issue.id}
+                    issue={issue}
+                    auth={auth}
+                    onAssign={openAssignmentModal}
+                    onStatusUpdate={handleStatusUpdate}
+                  />
                 ))}
               </div>
             )}
           </div>
         </section>
-
-        <aside className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 2xl:sticky 2xl:top-6 2xl:self-start">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-950">Buat Assignment</h3>
-            <p className="mt-1 text-sm text-slate-500">Pilih issue dan metode assignment untuk menugaskan teknisi.</p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-            <Field label="Issue ID">
-              <input
-                name="issueId"
-                value={form.issueId}
-                onChange={handleChange}
-                placeholder="Contoh: 102"
-                required
-                className={inputClass}
-              />
-            </Field>
-
-            <Field label="Method">
-              <select name="method" value={form.method} onChange={handleChange} className={inputClass}>
-                <option value="manual">Manual</option>
-                <option value="auto">Auto</option>
-              </select>
-            </Field>
-
-            {form.method === 'manual' ? (
-              <>
-                <Field label="Teknisi IDs">
-                  <input
-                    name="teknisiIds"
-                    value={form.teknisiIds}
-                    onChange={handleChange}
-                    placeholder="Pisahkan dengan koma, misal 123,456"
-                    className={inputClass}
-                  />
-                </Field>
-                <Field label="Leader ID">
-                  <input
-                    name="leaderId"
-                    value={form.leaderId}
-                    onChange={handleChange}
-                    placeholder="Opsional"
-                    className={inputClass}
-                  />
-                </Field>
-              </>
-            ) : (
-              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-3 text-sm text-blue-700">
-                Auto assignment akan memilih teknisi available terdekat berdasarkan lokasi issue.
-              </div>
-            )}
-
-            {createError && <Alert tone="error">{createError.message}</Alert>}
-            {message && <Alert tone={messageType}>{message}</Alert>}
-
-            <button
-              type="submit"
-              disabled={creating}
-              className="h-11 w-full rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {creating ? 'Membuat...' : 'Buat Assignment'}
-            </button>
-          </form>
-        </aside>
       </div>
+
+      {selectedIssue && (
+        <AssignmentModal
+          issue={selectedIssue}
+          method={method}
+          technicians={technicians}
+          selectedTechnicianIds={selectedTechnicianIds}
+          leaderId={leaderId}
+          loadingTechnicians={technicianRequest.loading}
+          technicianError={technicianRequest.error}
+          creating={createAssignment.loading}
+          createError={createAssignment.error}
+          onMethodChange={handleMethodChange}
+          onToggleTechnician={toggleTechnician}
+          onLeaderChange={setLeaderId}
+          onClose={resetAssignmentState}
+          onSubmit={handleCreateAssignment}
+        />
+      )}
     </div>
   );
 }
@@ -286,10 +267,7 @@ export default function AssignmentsPage() {
 const controlClass =
   'h-10 min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100';
 
-const inputClass =
-  'mt-2 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100';
-
-function IssueAssignmentCard({ issue, auth, onStatusUpdate }) {
+function IssueAssignmentCard({ issue, auth, onAssign, onStatusUpdate }) {
   const assignments = issue.assignments || [];
   const title = issue.judul || issue.title || 'Tanpa judul';
   const description = issue.deskripsi || issue.description || 'Tidak ada deskripsi.';
@@ -308,6 +286,13 @@ function IssueAssignmentCard({ issue, auth, onStatusUpdate }) {
           <h4 className="mt-3 text-base font-semibold text-slate-950">{title}</h4>
           <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
         </div>
+        <button
+          type="button"
+          onClick={() => onAssign(issue)}
+          className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+        >
+          Assign
+        </button>
       </div>
 
       {assignments.length > 0 ? (
@@ -325,8 +310,213 @@ function IssueAssignmentCard({ issue, auth, onStatusUpdate }) {
   );
 }
 
+function AssignmentModal({
+  issue,
+  method,
+  technicians,
+  selectedTechnicianIds,
+  leaderId,
+  loadingTechnicians,
+  technicianError,
+  creating,
+  createError,
+  onMethodChange,
+  onToggleTechnician,
+  onLeaderChange,
+  onClose,
+  onSubmit,
+}) {
+  const title = issue.judul || issue.title || 'Tanpa judul';
+  const address = issue.alamat || issue.address || 'Alamat belum tersedia';
+  const priority = issue.priority || 'standar';
+  const manualReady = selectedTechnicianIds.length > 0 && (selectedTechnicianIds.length === 1 || leaderId);
+  const submitDisabled = creating || loadingTechnicians || (method === 'manual' && !manualReady);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="presentation">
+      <div
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="assignment-modal-title"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Buat Assignment</p>
+            <h3 id="assignment-modal-title" className="mt-1 text-xl font-semibold text-slate-950">
+              Pilih teknisi
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={creating}
+            aria-label="Tutup modal"
+            className="rounded-lg px-2.5 py-1.5 text-xl leading-none text-slate-500 transition hover:bg-slate-100 disabled:opacity-50"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">ID {issue.id}</span>
+            <Badge value={issue.status || 'unknown'} />
+            <Badge value={priority} />
+          </div>
+          <h4 className="mt-3 font-semibold text-slate-950">{title}</h4>
+          <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+            <Meta label="Area" value={issue.area || '-'} />
+            <Meta label="Alamat" value={address} />
+          </div>
+        </div>
+
+        <fieldset className="mt-5">
+          <legend className="text-sm font-semibold text-slate-800">Metode assignment</legend>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <MethodOption
+              checked={method === 'auto'}
+              title="Auto Assignment"
+              description="Backend memilih teknisi terdekat."
+              onChange={() => onMethodChange('auto')}
+            />
+            <MethodOption
+              checked={method === 'manual'}
+              title="Manual Assignment"
+              description="Pilih satu atau beberapa teknisi."
+              onChange={() => onMethodChange('manual')}
+            />
+          </div>
+        </fieldset>
+
+        <div className="mt-5">
+          {method === 'auto' ? (
+            <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+              Teknisi available terdekat akan dipilih otomatis.
+            </div>
+          ) : loadingTechnicians ? (
+            <EmptyState title="Memuat teknisi..." description={`Mencari teknisi untuk area ${issue.area || '-'}.`} />
+          ) : technicianError ? (
+            <EmptyState
+              title="Gagal memuat teknisi"
+              description={technicianError.message || 'Terjadi kesalahan saat mengambil daftar teknisi.'}
+              tone="error"
+            />
+          ) : technicians.length ? (
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-800">Teknisi di area {issue.area || '-'}</p>
+                <p className="text-xs text-slate-500">{selectedTechnicianIds.length} dipilih</p>
+              </div>
+              <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+                {technicians.map((technician) => (
+                  <TechnicianOption
+                    key={technician.id}
+                    technician={technician}
+                    selected={selectedTechnicianIds.includes(technician.id)}
+                    showLeader={selectedTechnicianIds.length > 1 && selectedTechnicianIds.includes(technician.id)}
+                    isLeader={leaderId === technician.id}
+                    onToggle={() => onToggleTechnician(technician.id)}
+                    onLeaderChange={() => onLeaderChange(technician.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <EmptyState title="Teknisi tidak ditemukan" description={`Belum ada teknisi untuk area ${issue.area || '-'}.`} />
+          )}
+        </div>
+
+        {createError && <div className="mt-4"><Alert tone="error">{createError.message}</Alert></div>}
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={creating}
+            className="h-10 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={submitDisabled}
+            className="h-10 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {creating ? 'Menugaskan...' : 'Assign'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MethodOption({ checked, title, description, onChange }) {
+  return (
+    <label className={`flex cursor-pointer gap-3 rounded-xl border p-4 transition ${checked ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-blue-200'}`}>
+      <input type="radio" name="assignment-method" checked={checked} onChange={onChange} className="mt-1 accent-blue-600" />
+      <span>
+        <span className="block text-sm font-semibold text-slate-900">{title}</span>
+        <span className="mt-1 block text-xs leading-5 text-slate-500">{description}</span>
+      </span>
+    </label>
+  );
+}
+
+function TechnicianOption({ technician, selected, showLeader, isLeader, onToggle, onLeaderChange }) {
+  const status = normalize(technician.status || 'off');
+  const selectable = status === 'available';
+  const statusTone =
+    status === 'available' ? 'bg-emerald-500' : status === 'busy' ? 'bg-amber-500' : 'bg-slate-400';
+
+  return (
+    <div className={`flex items-center gap-3 rounded-xl border p-3 ${selectable ? 'border-slate-200' : 'border-slate-100 bg-slate-50'}`}>
+      <input
+        type="checkbox"
+        checked={selected}
+        disabled={!selectable}
+        onChange={onToggle}
+        aria-label={`Pilih ${technician.nama || technician.name || `teknisi ${technician.id}`}`}
+        className="h-4 w-4 shrink-0 accent-blue-600 disabled:cursor-not-allowed"
+      />
+      <div className="min-w-0 flex-1">
+        <p className={`truncate text-sm font-semibold ${selectable ? 'text-slate-950' : 'text-slate-500'}`}>
+          {technician.nama || technician.name || `Teknisi ${technician.id}`}
+        </p>
+        <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+          <span className={`h-2 w-2 rounded-full ${statusTone}`} />
+          <span className="capitalize">{formatLabel(technician.status || 'off')}</span>
+          {technician.areaKerja && <span>• {technician.areaKerja}</span>}
+        </div>
+      </div>
+      {showLeader && (
+        <label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs font-medium text-slate-600">
+          <input
+            type="radio"
+            name="assignment-leader"
+            checked={isLeader}
+            onChange={onLeaderChange}
+            className="accent-blue-600"
+          />
+          Leader
+        </label>
+      )}
+    </div>
+  );
+}
+
+function Meta({ label, value }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-1 break-words text-sm text-slate-700">{value}</p>
+    </div>
+  );
+}
+
 function AssignmentRow({ assignment, auth, onStatusUpdate }) {
-  const technician = assignment.teknisi?.user?.name || assignment.teknisi?.user?.username || assignment.teknisiId || 'N/A';
+  const technician = assignment.teknisi?.user?.nama || assignment.teknisi?.user?.name || assignment.teknisi?.user?.username || assignment.teknisiId || 'N/A';
   const status = assignment.status || 'assigned';
   const canManage = canManageAssignment(auth, assignment);
 
@@ -381,15 +571,6 @@ function SummaryCard({ label, value, detail, tone }) {
   );
 }
 
-function Field({ label, children }) {
-  return (
-    <label className="block min-w-0">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
-      {children}
-    </label>
-  );
-}
-
 function Badge({ value }) {
   const key = normalize(value);
   const className = statusStyles[key] || statusStyles.default;
@@ -436,4 +617,10 @@ function normalize(value) {
 
 function formatLabel(value) {
   return String(value || 'Unknown').replace(/_/g, ' ');
+}
+
+function getCollection(response) {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.data)) return response.data;
+  return [];
 }

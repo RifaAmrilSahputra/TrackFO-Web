@@ -45,8 +45,18 @@ export const issueAPI = {
 // ============= TRACKING =============
 export const trackingAPI = {
   create: (trackingData) => api.post('/tracking', trackingData),
+
+  // endpoint lama
   getAll: (params) => api.get('/tracking', { params }),
-  getByTechnician: (teknisiId, params) => api.get(`/tracking/teknisi/${teknisiId}`, { params }),
+
+  getGangguanList: () => api.get('/tracking/gangguan'),
+
+  // endpoint baru
+  getByGangguan: (gangguanId) =>
+    api.get(`/tracking/gangguan/${gangguanId}`),
+
+  getByTechnician: (teknisiId) =>
+    api.get(`/tracking/teknisi/${teknisiId}`),
 };
 
 // ============= REPORTS =============
