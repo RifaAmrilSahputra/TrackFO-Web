@@ -106,6 +106,7 @@ export const dashboardAPI = {
   getStats: (params) => api.get('/dashboard/stats', { params }),
   getCharts: (params) => api.get('/dashboard/charts', { params }),
   getSummary: () => api.get('/dashboard/summary'),
+  getDashboard: () => api.get("/dashboard"),
 };
 
 // ============= GENERIC METHODS =============
