@@ -241,34 +241,6 @@ src/
 
 ---
 
-# 📸 Screenshots
-
-## Dashboard
-
-```text id="dashboard-placeholder"
-Add Dashboard Screenshot Here
-```
-
-## Live Tracking
-
-```text id="tracking-placeholder"
-Add Tracking Map Screenshot Here
-```
-
-## Disturbance Management
-
-```text id="gangguan-placeholder"
-Add Disturbance Management Screenshot Here
-```
-
-## Assignment Management
-
-```text id="assignment-placeholder"
-Add Assignment Screenshot Here
-```
-
----
-
 # ⚙️ Installation
 
 ### Clone Repository
