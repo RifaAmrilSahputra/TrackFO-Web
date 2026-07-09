@@ -1,23 +1,153 @@
+import {
+  ClipboardPlus,
+  CheckCircle2,
+  Truck,
+  Wrench,
+  ShieldCheck,
+  BadgeCheck,
+} from "lucide-react";
+
 import SectionCard from "./SectionCard";
 
-function Item({ label, value, color }) {
+const items = [
+  {
+    key: "assigned",
+    label: "Assigned",
+    color: "bg-blue-500",
+    light: "bg-blue-50",
+    text: "text-blue-700",
+    icon: ClipboardPlus,
+  },
+  {
+    key: "accepted",
+    label: "Accepted",
+    color: "bg-cyan-500",
+    light: "bg-cyan-50",
+    text: "text-cyan-700",
+    icon: CheckCircle2,
+  },
+  {
+    key: "on_the_way",
+    label: "On The Way",
+    color: "bg-amber-500",
+    light: "bg-amber-50",
+    text: "text-amber-700",
+    icon: Truck,
+  },
+  {
+    key: "working",
+    label: "Working",
+    color: "bg-emerald-500",
+    light: "bg-emerald-50",
+    text: "text-emerald-700",
+    icon: Wrench,
+  },
+  {
+    key: "pending_verification",
+    label: "Verification",
+    color: "bg-violet-500",
+    light: "bg-violet-50",
+    text: "text-violet-700",
+    icon: ShieldCheck,
+  },
+  {
+    key: "done",
+    label: "Done",
+    color: "bg-slate-700",
+    light: "bg-slate-100",
+    text: "text-slate-700",
+    icon: BadgeCheck,
+  },
+];
+
+function AssignmentCard({
+  label,
+  value,
+  Icon,
+  color,
+  light,
+  text,
+}) {
   return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+    <div
+      className="
+        group
+        rounded-3xl
+        border
+        border-slate-200
+        bg-white
+        p-5
+        transition-all
+        duration-300
+        hover:-translate-y-1
+        hover:shadow-lg
+      "
+    >
       <div className="flex items-center justify-between">
 
-        <span className="text-sm text-slate-500">
-          {label}
-        </span>
+        <div
+          className={`
+            flex
+            h-12
+            w-12
+            items-center
+            justify-center
+            rounded-2xl
+            ${light}
+          `}
+        >
+          <Icon
+            size={24}
+            className={text}
+          />
+        </div>
 
         <span
-          className={`h-3 w-3 rounded-full ${color}`}
+          className={`
+            rounded-full
+            px-2.5
+            py-1
+            text-xs
+            font-semibold
+            text-white
+            ${color}
+          `}
+        >
+          Active
+        </span>
+
+      </div>
+
+      <div className="mt-6">
+
+        <div className="text-4xl font-bold text-slate-900">
+
+          {value}
+
+        </div>
+
+        <div className="mt-2 text-sm font-medium text-slate-500">
+
+          {label}
+
+        </div>
+
+      </div>
+
+      <div className="mt-6 h-2 rounded-full bg-slate-100">
+
+        <div
+          className={`h-full rounded-full ${color}`}
+          style={{
+            width: `${Math.min(
+              value * 10,
+              100
+            )}%`,
+          }}
         />
 
       </div>
 
-      <div className="mt-3 text-2xl font-bold text-slate-900">
-        {value}
-      </div>
     </div>
   );
 }
@@ -25,52 +155,36 @@ function Item({ label, value, color }) {
 export default function AssignmentSummary({
   summary,
 }) {
+
   if (!summary) return null;
 
   return (
+
     <SectionCard
-      title="Assignment"
-      subtitle="Status pekerjaan teknisi."
+      title="Assignment Workflow"
+      subtitle="Status seluruh proses assignment teknisi."
     >
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
 
-        <Item
-          label="Assigned"
-          value={summary.assigned}
-          color="bg-blue-500"
-        />
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
 
-        <Item
-          label="Accepted"
-          value={summary.accepted}
-          color="bg-cyan-500"
-        />
+        {items.map((item) => (
 
-        <Item
-          label="On The Way"
-          value={summary.on_the_way}
-          color="bg-yellow-500"
-        />
+          <AssignmentCard
+            key={item.key}
+            label={item.label}
+            value={summary[item.key] ?? 0}
+            Icon={item.icon}
+            color={item.color}
+            light={item.light}
+            text={item.text}
+          />
 
-        <Item
-          label="Working"
-          value={summary.working}
-          color="bg-green-500"
-        />
-
-        <Item
-          label="Verification"
-          value={summary.pending_verification}
-          color="bg-violet-500"
-        />
-
-        <Item
-          label="Done"
-          value={summary.done}
-          color="bg-slate-500"
-        />
+        ))}
 
       </div>
+
     </SectionCard>
+
   );
+
 }

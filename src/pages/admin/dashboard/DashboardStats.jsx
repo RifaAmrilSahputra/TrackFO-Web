@@ -1,35 +1,97 @@
-import SectionCard from "./SectionCard";
+import {
+  AlertTriangle,
+  Users,
+  ClipboardList,
+  FileText,
+  TrendingUp,
+} from "lucide-react";
 
-function StatItem({
+function StatCard({
   title,
   value,
+  subtitle,
+  icon,
   color,
-  description,
 }) {
   return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50 p-5">
+    <div
+      className="
+        group
+        relative
+        overflow-hidden
+        rounded-3xl
+        border
+        border-slate-200
+        bg-white
+        p-6
+        shadow-sm
+        transition-all
+        duration-300
+        hover:-translate-y-1
+        hover:shadow-xl
+      "
+    >
+      {/* Background Decoration */}
 
-      <div className="flex items-center justify-between">
+      <div
+        className={`absolute -right-8 -top-8 h-32 w-32 rounded-full opacity-10 ${color}`}
+      />
 
-        <p className="text-sm font-medium text-slate-500">
-          {title}
-        </p>
+      <div className="relative flex items-start justify-between">
 
-        <span
-          className={`h-3 w-3 rounded-full ${color}`}
-        />
+        <div>
+
+          <p className="text-sm font-medium text-slate-500">
+            {title}
+          </p>
+
+          <h2 className="mt-3 text-4xl font-bold tracking-tight text-slate-900">
+            {value}
+          </h2>
+
+          <div className="mt-4 flex items-center gap-2">
+
+            <TrendingUp
+              size={15}
+              className="text-emerald-500"
+            />
+
+            <span className="text-sm text-slate-500">
+              {subtitle}
+            </span>
+
+          </div>
+
+        </div>
+
+        <div
+          className={`
+            flex
+            h-14
+            w-14
+            items-center
+            justify-center
+            rounded-2xl
+            text-white
+            shadow-lg
+            ${color}
+          `}
+        >
+          {icon}
+        </div>
 
       </div>
 
-      <h3 className="mt-3 text-3xl font-bold text-slate-900">
-        {value}
-      </h3>
+      <div className="mt-6 h-1 w-full rounded-full bg-slate-100">
 
-      {description && (
-        <p className="mt-2 text-sm text-slate-500">
-          {description}
-        </p>
-      )}
+        <div
+          className={`h-full rounded-full ${color}`}
+          style={{
+            width: "70%",
+          }}
+        />
+
+      </div>
 
     </div>
   );
@@ -38,42 +100,43 @@ function StatItem({
 export default function DashboardStats({
   stats,
 }) {
-
   if (!stats) return null;
 
   return (
+    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
 
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-
-      <StatItem
+      <StatCard
         title="Total Gangguan"
         value={stats.totalGangguan}
+        subtitle={`${stats.gangguanAktif} gangguan aktif`}
+        icon={<AlertTriangle size={28} />}
         color="bg-red-500"
-        description={`${stats.gangguanAktif} gangguan aktif`}
       />
 
-      <StatItem
-        title="Teknisi"
+      <StatCard
+        title="Total Teknisi"
         value={stats.totalTeknisi}
+        subtitle={`${stats.teknisiAvailable} teknisi tersedia`}
+        icon={<Users size={28} />}
         color="bg-blue-500"
-        description={`${stats.teknisiAvailable} tersedia`}
       />
 
-      <StatItem
-        title="Assignment"
+      <StatCard
+        title="Assignment Aktif"
         value={stats.assignmentAktif}
+        subtitle={`${stats.teknisiBusy} teknisi sedang bekerja`}
+        icon={<ClipboardList size={28} />}
         color="bg-violet-500"
-        description="Sedang berjalan"
       />
 
-      <StatItem
-        title="Laporan"
+      <StatCard
+        title="Total Laporan"
         value={stats.totalLaporan}
+        subtitle="Laporan pekerjaan"
+        icon={<FileText size={28} />}
         color="bg-emerald-500"
-        description="Total laporan"
       />
 
     </div>
-
   );
 }

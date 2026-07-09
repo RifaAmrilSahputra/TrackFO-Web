@@ -1,39 +1,70 @@
+import {
+  AlertTriangle,
+  ClipboardList,
+  MapPinned,
+  FileText,
+  ArrowRight,
+} from "lucide-react";
+
 import { useNavigate } from "react-router-dom";
 
 import SectionCard from "./SectionCard";
 
 const actions = [
   {
-    title: "Kelola Gangguan",
-    description:
-      "Lihat gangguan baru dan lakukan assignment.",
-    to: "issues",
-    color: "bg-red-100 text-red-700",
-    icon: "🚨",
+    title: "Gangguan",
+    description: "Kelola gangguan jaringan dan lakukan assignment teknisi.",
+    route: "/admin/issues",
+
+    icon: AlertTriangle,
+
+    bg: "from-red-500 to-rose-600",
+
+    light: "bg-red-50",
+
+    text: "text-red-600",
   },
+
   {
     title: "Assignment",
-    description:
-      "Kelola penugasan teknisi.",
-    to: "assignments",
-    color: "bg-blue-100 text-blue-700",
-    icon: "📋",
+    description: "Monitor seluruh proses penugasan teknisi lapangan.",
+    route: "/admin/assignments",
+
+    icon: ClipboardList,
+
+    bg: "from-blue-500 to-indigo-600",
+
+    light: "bg-blue-50",
+
+    text: "text-blue-600",
   },
+
   {
     title: "Tracking",
-    description:
-      "Pantau posisi teknisi secara realtime.",
-    to: "tracking",
-    color: "bg-green-100 text-green-700",
-    icon: "📍",
+    description: "Pantau posisi teknisi secara realtime pada peta.",
+    route: "/admin/tracking",
+
+    icon: MapPinned,
+
+    bg: "from-emerald-500 to-green-600",
+
+    light: "bg-emerald-50",
+
+    text: "text-emerald-600",
   },
+
   {
     title: "Laporan",
-    description:
-      "Review laporan pekerjaan teknisi.",
-    to: "reports",
-    color: "bg-violet-100 text-violet-700",
-    icon: "📄",
+    description: "Lihat hasil pekerjaan teknisi dan laporan gangguan.",
+    route: "/admin/reports",
+
+    icon: FileText,
+
+    bg: "from-violet-500 to-purple-600",
+
+    light: "bg-violet-50",
+
+    text: "text-violet-600",
   },
 ];
 
@@ -44,47 +75,133 @@ export default function QuickActions() {
   return (
 
     <SectionCard
-      title="Akses Cepat"
-      subtitle="Menu utama administrasi."
+      title="Quick Actions"
+      subtitle="Akses cepat menuju modul utama TrackFO."
     >
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
 
-        {actions.map((item) => (
+        {actions.map((item) => {
 
-          <button
-            key={item.title}
-            onClick={() => navigate(item.to)}
-            className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:-translate-y-1 hover:border-blue-200 hover:bg-white hover:shadow-md"
-          >
+          const Icon = item.icon;
 
-            <div
-              className={`flex h-12 w-12 items-center justify-center rounded-xl text-xl ${item.color}`}
+          return (
+
+            <button
+              key={item.title}
+              onClick={() => navigate(item.route)}
+              className="
+                group
+                relative
+                overflow-hidden
+                rounded-3xl
+                border
+                border-slate-200
+                bg-white
+                p-6
+                text-left
+                transition-all
+                duration-300
+                hover:-translate-y-2
+                hover:shadow-xl
+              "
             >
 
-              {item.icon}
+              {/* Background Gradient */}
 
-            </div>
+              <div
+                className={`
+                  absolute
+                  inset-x-0
+                  top-0
+                  h-2
+                  bg-gradient-to-r
+                  ${item.bg}
+                `}
+              />
 
-            <h4 className="mt-4 text-lg font-semibold text-slate-900">
+              {/* Icon */}
 
-              {item.title}
+              <div
+                className={`
+                  flex
+                  h-16
+                  w-16
+                  items-center
+                  justify-center
+                  rounded-2xl
+                  ${item.light}
+                `}
+              >
 
-            </h4>
+                <Icon
+                  size={32}
+                  className={item.text}
+                />
 
-            <p className="mt-2 text-sm leading-6 text-slate-500">
+              </div>
 
-              {item.description}
+              {/* Content */}
 
-            </p>
+              <div className="mt-6">
 
-          </button>
+                <h3 className="text-xl font-bold text-slate-900">
 
-        ))}
+                  {item.title}
+
+                </h3>
+
+                <p className="mt-3 text-sm leading-6 text-slate-500">
+
+                  {item.description}
+
+                </p>
+
+              </div>
+
+              {/* Footer */}
+
+              <div className="mt-8 flex items-center justify-between">
+
+                <span
+                  className={`
+                    rounded-full
+                    px-3
+                    py-1
+                    text-xs
+                    font-semibold
+                    ${item.light}
+                    ${item.text}
+                  `}
+                >
+
+                  Buka Modul
+
+                </span>
+
+                <ArrowRight
+                  size={20}
+                  className="
+                    text-slate-400
+                    transition-all
+                    duration-300
+                    group-hover:translate-x-2
+                    group-hover:text-slate-700
+                  "
+                />
+
+              </div>
+
+            </button>
+
+          );
+
+        })}
 
       </div>
 
     </SectionCard>
 
   );
+
 }
