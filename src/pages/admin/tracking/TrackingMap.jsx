@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 
 import {
   MapContainer,
   Marker,
   Popup,
   TileLayer,
+  Polyline,
 } from "react-leaflet";
 
 import L from "leaflet";
@@ -31,16 +32,52 @@ const leaderIcon = new L.Icon({
 
 const teknisiIcon = new L.Icon({
   iconUrl:
-    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png",
+    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png",
   shadowUrl:
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
 });
 
+const historyStartIcon = new L.Icon({
+  iconUrl:
+    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-grey.png",
+  shadowUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+});
+
+const historyEndIcon = new L.Icon({
+  iconUrl:
+    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-black.png",
+  shadowUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+});
+
+function getDistanceColor(distanceKm) {
+  if (distanceKm == null) {
+    return "#6b7280";
+  }
+
+  if (distanceKm < 0.5) {
+    return "#22c55e"; // hijau
+  }
+
+  if (distanceKm <= 2) {
+    return "#eab308"; // kuning
+  }
+
+  return "#ef4444"; // merah
+}
+
 export default function TrackingMap({
   gangguan,
   teknisi = [],
+  selectedTechnician,
+  history = [],
 }) {
 
   const center = useMemo(() => {
@@ -58,6 +95,18 @@ export default function TrackingMap({
     return [-6.2, 106.816666];
 
   }, [gangguan]);
+
+  const sortedHistory = useMemo(
+    () =>
+      history
+        .slice()
+        .sort(
+          (a, b) =>
+            new Date(a.recordedAt) -
+            new Date(b.recordedAt)
+        ),
+    [history]
+  );
 
   return (
 
@@ -168,86 +217,172 @@ export default function TrackingMap({
 
             if (!item.location) return null;
 
+            const showAssignmentLine =
+              gangguan?.latitude &&
+              gangguan?.longitude &&
+              item.location.latitude &&
+              item.location.longitude;
+
             return (
 
-              <Marker
-                key={item.teknisiId}
-                position={[
-                  item.location.latitude,
-                  item.location.longitude,
-                ]}
-                icon={
-                  item.isLeader
-                    ? leaderIcon
-                    : teknisiIcon
-                }
-              >
+              <Fragment key={item.teknisiId}>
 
-                <Popup>
+                {showAssignmentLine && (
+                  <Polyline
+                    positions={[
+                      [item.location.latitude, item.location.longitude],
+                      [gangguan.latitude, gangguan.longitude],
+                    ]}
+                    pathOptions={{
+                      color: getDistanceColor(item.distance),
+                      weight: 3,
+                      dashArray: "6, 8",
+                    }}
+                  />
+                )}
 
-                  <div className="space-y-1">
+                <Marker
+                  position={[
+                    item.location.latitude,
+                    item.location.longitude,
+                  ]}
+                  icon={
+                    item.isLeader
+                      ? leaderIcon
+                      : teknisiIcon
+                  }
+                >
 
-                    <h4 className="font-semibold">
+                  <Popup>
 
-                      👷 {item.nama}
+                    <div className="space-y-1">
 
-                    </h4>
+                      <h4 className="font-semibold">
 
-                    <div>
+                        👷 {item.nama}
 
-                      {item.isLeader
-                        ? "Leader"
-                        : "Member"}
+                      </h4>
+
+                      <div>
+
+                        {item.isLeader
+                          ? "Leader"
+                          : "Member"}
+
+                      </div>
+
+                      <div>
+
+                        Status :
+
+                        {" "}
+
+                        {item.assignmentStatus}
+
+                      </div>
+
+                      <div>
+
+                        Distance :
+
+                        {" "}
+
+                        {item.distance?.toFixed(2)}
+
+                        {" "}km
+
+                      </div>
+
+                      <div>
+
+                        Last Seen :
+
+                        {" "}
+
+                        {item.lastSeen
+                          ? new Date(
+                              item.lastSeen
+                            ).toLocaleString(
+                              "id-ID"
+                            )
+                          : "-"}
+
+                      </div>
 
                     </div>
 
-                    <div>
+                  </Popup>
 
-                      Status :
+                </Marker>
 
-                      {" "}
-
-                      {item.assignmentStatus}
-
-                    </div>
-
-                    <div>
-
-                      Distance :
-
-                      {" "}
-
-                      {item.distance?.toFixed(2)}
-
-                      {" "}km
-
-                    </div>
-
-                    <div>
-
-                      Last Seen :
-
-                      {" "}
-
-                      {item.lastSeen
-                        ? new Date(
-                            item.lastSeen
-                          ).toLocaleString(
-                            "id-ID"
-                          )
-                        : "-"}
-
-                    </div>
-
-                  </div>
-
-                </Popup>
-
-              </Marker>
+              </Fragment>
 
             );
 
           })}
+
+          {/* History perjalanan teknisi terpilih */}
+
+          {selectedTechnician && sortedHistory.length > 1 && (
+            <>
+              <Polyline
+                positions={sortedHistory.map((item) => [
+                  Number(item.latitude),
+                  Number(item.longitude),
+                ])}
+                pathOptions={{
+                  color: "#3b82f6",
+                  weight: 4,
+                }}
+              />
+
+              <Marker
+                position={[
+                  Number(sortedHistory[0].latitude),
+                  Number(sortedHistory[0].longitude),
+                ]}
+                icon={historyStartIcon}
+              >
+                <Popup>
+                  <div className="space-y-1">
+                    <h4 className="font-semibold">
+                      Start Perjalanan
+                    </h4>
+                    <div>
+                      {sortedHistory[0].recordedAt
+                        ? new Date(
+                            sortedHistory[0].recordedAt
+                          ).toLocaleString("id-ID")
+                        : "-"}
+                    </div>
+                  </div>
+                </Popup>
+              </Marker>
+
+              <Marker
+                position={[
+                  Number(sortedHistory[sortedHistory.length - 1].latitude),
+                  Number(sortedHistory[sortedHistory.length - 1].longitude),
+                ]}
+                icon={historyEndIcon}
+              >
+                <Popup>
+                  <div className="space-y-1">
+                    <h4 className="font-semibold">
+                      Akhir Perjalanan
+                    </h4>
+                    <div>
+                      {sortedHistory[sortedHistory.length - 1].recordedAt
+                        ? new Date(
+                            sortedHistory[sortedHistory.length - 1].recordedAt
+                          ).toLocaleString("id-ID")
+                        : "-"}
+                    </div>
+                  </div>
+                </Popup>
+              </Marker>
+            </>
+          )}
 
         </MapContainer>
 

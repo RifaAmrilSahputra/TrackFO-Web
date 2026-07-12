@@ -64,8 +64,17 @@ export default function TrackingPage() {
     // Load tracking saat gangguan dipilih
     useEffect(() => {
 
-        if (!selectedGangguan) return;
+        if (!selectedGangguan) {
 
+            setTrackingData(null);
+            setSelectedTechnician(null);
+            setHistory([]);
+            return;
+
+        }
+
+        setSelectedTechnician(null);
+        setHistory([]);
         loadTracking();
 
     }, [selectedGangguan]);
@@ -89,20 +98,53 @@ export default function TrackingPage() {
 
     }
 
-    // Polling
+    function getPollingInterval(teknisiList = []) {
+        if (!Array.isArray(teknisiList) || !teknisiList.length) {
+            return 30000;
+        }
+
+        // Prioritaskan refresh cepat jika ada teknisi yang sedang menuju lokasi atau sedang bekerja
+        if (
+            teknisiList.some(
+                (item) =>
+                    item.assignmentStatus === "on_the_way" ||
+                    item.assignmentStatus === "working"
+            )
+        ) {
+            return 5000;
+        }
+
+        // Update lebih jarang jika semua teknisi baru ditugaskan
+        if (
+            teknisiList.every(
+                (item) => item.assignmentStatus === "assigned"
+            )
+        ) {
+            return 15000;
+        }
+
+        // Fallback untuk kondisi lain / tidak ada teknisi aktif
+        return 30000;
+    }
+
+    // Polling adaptif berdasarkan status assignment
     useEffect(() => {
 
         if (!selectedGangguan) return;
+
+        const intervalMs = getPollingInterval(
+            trackingData?.teknisi
+        );
 
         const interval = setInterval(() => {
 
             loadTracking();
 
-        }, 15000);
+        }, intervalMs);
 
         return () => clearInterval(interval);
 
-    }, [selectedGangguan]);
+    }, [selectedGangguan, trackingData]);
 
     async function handleSelectTechnician(teknisi) {
 
@@ -146,6 +188,8 @@ export default function TrackingPage() {
                                 <TrackingMap
                                     gangguan={trackingData.gangguan}
                                     teknisi={trackingData.teknisi}
+                                    selectedTechnician={selectedTechnician}
+                                    history={history}
                                 />
 
                             </div>
