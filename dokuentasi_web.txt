@@ -1,0 +1,343 @@
+TrackFO Web - Dokumentasi Sistem
+================================
+
+1. Ringkasan Proyek
+-------------------
+TrackFO Web adalah dashboard berbasis React yang digunakan oleh Super Admin dan Admin untuk mengelola gangguan jaringan FTTH, penugasan teknisi, pelaporan, serta monitoring lokasi teknisi secara real-time.
+
+Aplikasi ini dibangun dengan:
+- React 19 + Vite
+- Tailwind CSS
+- React Router DOM untuk routing
+- Axios untuk komunikasi API
+- Leaflet + React Leaflet untuk peta tracking
+
+2. Struktur Utama Aplikasi
+-------------------------
+src/
+  App.jsx                 - Entry-point aplikasi React, membungkus route dengan BrowserRouter dan AuthProvider.
+  main.jsx                - Render React root ke elemen HTML.
+  context/AuthContext.jsx - Manajemen autentikasi, token, user, login/logout.
+  routes/
+    AppRoutes.jsx         - Semua route publik dan proteksi route role-based.
+    DashboardLayout.jsx   - Layout umum dashboard dengan sidebar navigasi.
+    ProtectedRoute.jsx    - Middleware route untuk cek autentikasi dan role.
+  services/
+    apiClient.js          - Definisi axios base API, interceptors request/response.
+    api.js                - Koleksi endpoint API khusus fitur.
+  hooks/useAPI.js         - Custom hooks untuk fetch dan mutation API.
+  utils/errorHandler.js   - Utility transformasi error API ke pesan user.
+  pages/auth/LoginPage.jsx
+  pages/admin/
+    SuperAdminDashboard.jsx
+    AdminDashboard.jsx
+    IssuesPage.jsx
+    AssignmentsPage.jsx
+    ReportsPage.jsx
+    TrackingPage.jsx
+    UsersPage.jsx
+    dashboard/*            - Komponen dashboard kecil.
+    tracking/*             - Komponen tracking peta dan daftar teknisi.
+
+3. Entry point dan routing
+--------------------------
+- `src/main.jsx` memanggil `App`.
+- `src/App.jsx` membungkus aplikasi dengan `BrowserRouter` dan `AuthProvider`.
+- `src/routes/AppRoutes.jsx` mendefinisikan route aplikasi.
+
+Flow routing utama:
+- `/login` -> `LoginPage`
+- `/super-admin/dashboard/*` -> Super Admin routes
+- `/admin/dashboard/*` -> Admin routes
+- `/` dan `*` -> `RedirectToDashboard` berdasarkan role user
+
+Role-based routing:
+- Super Admin dapat mengakses semua route `SUPER_ADMIN`.
+- Admin dapat mengakses route `ADMIN`.
+- ProtectedRoute juga memberikan akses `ADMIN` ke `SUPER_ADMIN` lewat pengecekan khusus.
+
+Contoh kode proteksi role:
+```
+const hasRequiredRole = requiredRoles.some((role) => {
+  if (!user?.roles) return false;
+  if (role === 'ADMIN' && user.roles.includes('SUPER_ADMIN')) return true;
+  return user.roles.includes(role);
+});
+```
+
+4. Autentikasi dan state user
+------------------------------
+File inti: `src/context/AuthContext.jsx`
+
+Fungsi utama:
+- `login(email, password)`: memanggil `authAPI.login`, menyimpan token dan user ke `localStorage`, mengatur state `token`, `user`, `isAuthenticated`.
+- `logout()`: memanggil endpoint logout, membersihkan `localStorage` dan reset state.
+- `useEffect` inisialisasi state dari `localStorage` saat load.
+- Helper `hasRole`, `isSuperAdmin`, `isAdmin`.
+
+Token handling:
+- `apiClient.js` menambahkan header Authorization `Bearer ${token}` ke setiap request.
+- Response interceptor otomatis menghapus token pada 401 dan redirect ke `/login`.
+
+5. Koneksi API dan layanan
+--------------------------
+File inti: `src/services/apiClient.js`, `src/services/api.js`
+
+`apiClient.js`:
+- Base URL: `VITE_API_URL` atau `http://localhost:3000/api`
+- Timeout 10 detik
+- Request interceptor: sertakan `Authorization` token dari `localStorage`
+- Response interceptor: jika 401, hapus token/user dan arahkan ke login
+
+`api.js` berisi endpoint grouped:
+- `authAPI` (login, register, logout, getCurrentUser, refreshToken, changePassword, resetUserPassword)
+- `userAPI` (getAll, getById, create, update, delete, getAdmins, getTechnicians, getProfile, updateProfile, getAreas)
+- `issueAPI` / gangguan (create, getAll, getById, update, remove, assignTechnician, getAssignments, updateAssignmentStatus)
+- `trackingAPI` (create, getAll, getGangguanList, getByGangguan, getByTechnician)
+- `reportAPI` (CRUD report, generate, export)
+- `assignmentAPI` / `faultAPI` / `technicianAPI` / `dashboardAPI`
+- `genericAPI` untuk custom endpoint yang belum ada
+
+Penting: walau ada endpoint `assignmentAPI` dan `faultAPI`, halaman saat ini lebih banyak menggunakan `issueAPI`, `trackingAPI`, `reportAPI`, dan `userAPI`.
+
+6. Custom hooks API
+-------------------
+File: `src/hooks/useAPI.js`
+
+Hook utama:
+- `useAPI(apiFunction)` untuk eksekusi manual, menyimpan state `data`, `loading`, `error`.
+- `useFetch(apiFunction, dependencies)` otomatis melakukan fetch pada mount dan bila dep berubah.
+- `useMutation(apiFunction)` dibuat untuk operasi create/update/delete.
+
+Semua hook menggunakan `handleAPIError(err)` dari `utils/errorHandler.js`.
+
+Contoh penggunaan:
+- `const { data, loading, error, refetch } = useFetch(issueAPI.getAll);`
+- `const { mutate, loading: creating, error: createError } = useMutation(issueAPI.create);`
+
+7. Error handling
+------------------
+File: `src/utils/errorHandler.js`
+
+Fungsi penting:
+- `getErrorMessage(error)`: menerjemahkan error axios berdasarkan status code.
+- `getValidationErrors(error)`: ekstrak pesan 422 validation errors.
+- `handleAPIError(error)`: mengemas `message`, `validationErrors`, `statusCode`.
+- `logError(error, context)`: mencetak log konsol terstruktur.
+
+Log error dipakai di `AuthContext`, `useAPI`, dan halaman untuk debugging.
+
+8. Alur bisnis fitur utama
+--------------------------
+
+8.1 Login
+---------
+Halaman `LoginPage.jsx`:
+- Input email dan password
+- validasi sederhana: email diisi, password diisi, format email benar
+- memanggil `login(email, password)` dari `AuthContext`
+- setelah sukses, navigate ke dashboard berdasarkan role:
+  - `SUPER_ADMIN` -> `/super-admin/dashboard`
+  - `ADMIN` -> `/admin/dashboard`
+
+8.2 Dashboard
+-------------
+Ada dua dashboard berbeda:
+- `SuperAdminDashboard.jsx`
+- `AdminDashboard.jsx`
+
+Keduanya memanggil `dashboardAPI.getDashboard()` untuk menampilkan ringkasan.
+Super Admin menampilkan juga informasi akun, metrik kesehatan tracking, dan shortcut ke `users`.
+
+`AdminDashboard`:
+- memanggil ulang data setiap 30 detik dengan `setInterval` agar dashboard lebih segar.
+- menampilkan komponen kecil seperti `DashboardStats`, `AssignmentSummary`, `PrioritySummary`, `TrackingSummary`, `LatestIssues`, `LatestAssignments`, `BusyTechnicians`, `QuickActions`.
+
+8.3 Manajemen Gangguan / Issues
+-------------------------------
+Halaman `IssuesPage.jsx` berfokus pada:
+- Membaca daftar gangguan (`issueAPI.getAll`)
+- Membuat gangguan baru (`issueAPI.create`)
+- Memfilter berdasarkan search, status, priority, area
+- Memperbarui status gangguan (`issueAPI.update(issueId, { status })`)
+
+Logika penting:
+- `useFetch(issueAPI.getAll)` otomatis menampilkan data
+- `useMutation(issueAPI.create)` untuk create
+- `refetch()` setelah membuat gangguan atau setelah update status
+- `handleSubmit` membentuk payload dari form, menghapus field kosong, lalu memanggil API
+
+Filter dan summary:
+- `statusOptions` berasal dari status unik data gangguan
+- `filteredIssues` menggunakan `search`, `statusFilter`, `priorityFilter`, `areaFilter`
+- `summary` menghitung total, inProgress, highPriority, done
+
+8.4 Assignment Management
+-------------------------
+Halaman `AssignmentsPage.jsx` menggunakan data issue dari `issueAPI.getAll` untuk menampilkan assignment.
+
+Fitur utama:
+- Tampilkan issue dengan assignment yang sudah ada
+- Filter issue assigned / unassigned
+- Membuat assignment dengan metode `auto` atau `manual`
+- Memilih teknisi berdasarkan area ketika metode `manual`
+- Memperbarui status assignment dengan `issueAPI.updateAssignmentStatus`
+
+Logika penting:
+- `createAssignment = useMutation((payload) => issueAPI.assignTechnician(payload.issueId, payload.body))`
+- `technicianRequest = useMutation((params) => userAPI.getTechnicians(params))`
+- `toggleTechnician` memilih teknisi untuk assignment manual, mendukung leader ketika lebih dari satu teknisi
+- `handleMethodChange` memuat daftar teknisi jika mode manual
+- `handleCreateAssignment` mengirim struktur body:
+  - `method`
+  - `teknisiIds`
+  - `leaderId`
+
+8.5 Reports
+-----------
+Halaman `ReportsPage.jsx`:
+- memanggil `reportAPI.getAll`
+- filter berdasarkan search dan status laporan
+- menampilkan ringkasan total, pending/review, completed, with notes
+- menampilkan kartu laporan dengan metadata teknisi, issue, catatan, waktu
+
+Artinya sistem laporan digunakan sebagai review hasil pekerjaan teknisi.
+
+8.6 Tracking Live
+------------------
+Halaman `TrackingPage.jsx` adalah modul live monitoring:
+- Load `trackingAPI.getGangguanList()` untuk daftar gangguan aktif
+- Ketika gangguan dipilih, panggil `trackingAPI.getByGangguan(selectedGangguan)`
+- Tampilkan ringkasan, peta, detail gangguan, daftar teknisi, dan histori teknisi
+- Polling adaptif berdasarkan status teknisi
+
+Detail penting:
+- `getPollingInterval(teknisiList)`
+  - `on_the_way` / `working` -> polling 5 detik
+  - semua `assigned` -> polling 15 detik
+  - default -> polling 30 detik
+- `handleSelectTechnician` memuat histori tracking teknisi via `trackingAPI.getByTechnician(teknisi.teknisiId)`
+
+Komponen peta:
+- `TrackingMap.jsx` menggunakan `react-leaflet` dan `Leaflet`
+- Menampilkan marker untuk gangguan, teknisi, leader, dan riwayat titik
+- Menggambar `Polyline` dari teknisi ke lokasi gangguan dengan warna jarak
+- `getDistanceColor(distanceKm)` menentukan warna garis berdasarkan jarak
+
+Komponen ancillary:
+- `GangguanSelector.jsx` untuk memilih gangguan
+- `SummaryCards.jsx` menampilkan ringkasan tracking
+- `TechnicianList.jsx` menampilkan teknisi dan statusnya
+- `TechnicianHistory.jsx` menampilkan timeline titik GPS teknisi
+- `GangguanInfo.jsx` menampilkan detail issue gangguan
+
+9. User Management (Super Admin)
+--------------------------------
+File: `UsersPage.jsx`
+
+Fitur utama:
+- Tab Admin vs Technicians
+- Load data dengan `userAPI.getAdmins` dan `userAPI.getTechnicians`
+- Tambah akun baru, edit akun, reset password, nonaktifkan akun
+- Filter pencarian dan area kerja
+
+Logika penting:
+- `normalizeUser(user)` menyatukan struktur data user dari beragam sumber backend ke field standar seperti `nama`, `email`, `noHp`, `areaKerja`, `latitude`, `longitude`.
+- `validateTechnicianForm` memvalidasi email, password, nomor HP, koordinat.
+- `buildPayload` membangun payload request sesuai mode create/update.
+- `resetPasswordMutation` memanggil `authAPI.resetUserPassword(id, newPassword)`.
+- `disableMutation` memanggil `userAPI.delete(id)` untuk menonaktifkan akun.
+
+10. Komponen Dashboard dan UI kecil
+-----------------------------------
+Banyak komponen kecil memberi ringkasan data:
+- `DashboardStats.jsx`
+- `AssignmentSummary.jsx`
+- `PrioritySummary.jsx`
+- `TrackingSummary.jsx`
+- `LatestIssues.jsx`
+- `LatestAssignments.jsx`
+- `BusyTechnicians.jsx`
+- `QuickActions.jsx`
+
+Fungsi mereka umumnya menerima `props` data dan menampilkan kartu metrik atau list. Ini memisahkan presentasi UI dari logika bisnis halaman.
+
+11. Logika bisnis utama
+----------------------
+Gambaran alur bisnis:
+1. Admin/SuperAdmin login
+2. Masuk dashboard, data ringkasan diambil dari backend
+3. Admin dapat melihat issue, assignment, laporan, tracking, dan melakukan aksi langsung
+4. Super Admin mendapat akses tambahan ke manajemen user
+5. Issue dibuat dengan detail area, alamat, priority, dan lokasi GPS
+6. Assignment dibuat di atas issue dan bisa dipilih teknisi berdasarkan area
+7. Tracking menampilkan posisi teknisi untuk issue yang dipilih, termasuk histori GPS
+8. Laporan dibuat di backend oleh teknisi, kemudian bisa dilihat dan difilter di dashboard
+
+12. Kode dan fungsi penting yang perlu diketahui
+------------------------------------------------
+- `AuthProvider` (src/context/AuthContext.jsx)
+  - `login`, `logout`, `hasRole`, `isAuthenticated`
+- `ProtectedRoute` (src/routes/ProtectedRoute.jsx)
+  - validasi autentikasi dan role-based access
+- `apiClient` (src/services/apiClient.js)
+  - interceptors request/response
+- `issueAPI`, `trackingAPI`, `reportAPI`, `userAPI` (src/services/api.js)
+  - struktur endpoint bisnis utama
+- `useAPI`, `useFetch`, `useMutation` (src/hooks/useAPI.js)
+  - abstraksi fetch dan mutation API
+- `handleAPIError`, `getErrorMessage` (src/utils/errorHandler.js)
+  - terjemahkan error API ke user friendly
+- `TrackingPage.jsx` polling adaptif
+- `UsersPage.jsx` normalisasi data user
+- `IssuesPage.jsx` filter multi-kriteria
+
+13. Variabel lingkungan penting
+------------------------------
+- `VITE_API_URL` di `.env` atau environment build
+  - menentukan base API request untuk axios
+
+14. Cara menjalankan proyek
+--------------------------
+Perintah dasar di root proyek:
+- `npm install`
+- `npm run dev`
+- `npm run build`
+- `npm run preview`
+
+15. Catatan penting
+-------------------
+- Aplikasi memakai localStorage untuk menyimpan token dan user profile.
+- Redirect otomatis ke `/login` jika backend mengembalikan 401.
+- Sistem role `SUPER_ADMIN` bisa mengakses semua fitur `ADMIN`.
+- Halaman track monitoring menggunakan peta OpenStreetMap via Leaflet.
+- Banyak komponen memuat ulang data secara periodik untuk dashboard dan tracking.
+
+16. Area yang bisa ditingkatkan
+------------------------------
+- Penyempurnaan validasi form dan pesan error per field
+- Logging lebih terstruktur dan retry otomatis pada fetch/API
+- Paginate di daftar issue, assignment, report, users
+- Lebih banyak cache atau debounce untuk search/filter agar performa lebih baik
+- Tambahkan halaman detail issue dan report untuk navigasi lebih dalam
+
+17. File penting untuk perbaikan cepat
+-------------------------------------
+- `src/context/AuthContext.jsx`
+- `src/routes/AppRoutes.jsx`
+- `src/routes/ProtectedRoute.jsx`
+- `src/services/apiClient.js`
+- `src/services/api.js`
+- `src/hooks/useAPI.js`
+- `src/pages/auth/LoginPage.jsx`
+- `src/pages/admin/IssuesPage.jsx`
+- `src/pages/admin/AssignmentsPage.jsx`
+- `src/pages/admin/TrackingPage.jsx`
+- `src/pages/admin/UsersPage.jsx`
+- `src/pages/admin/ReportsPage.jsx`
+- `src/pages/admin/SuperAdminDashboard.jsx`
+- `src/pages/admin/AdminDashboard.jsx`
+
+18. Kesimpulan
+--------------
+TrackFO Web adalah dashboard operasional yang terstruktur dengan baik, berfokus pada manajemen gangguan, assignment teknisi, dan monitoring tracking. Logika utamanya berada pada lapisan API service, konteks autentikasi, dan halaman yang menggabungkan data dari backend ke tampilan ringkasan dan tabel. Dokumentasi ini mencakup alur login, role-based access, fitur dashboard, issue/assignment/report/track, serta data user management.

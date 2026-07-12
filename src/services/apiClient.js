@@ -23,6 +23,7 @@ export const userAPI = {
   create: (userData) => api.post('/users', userData),
   update: (id, userData) => api.patch(`/users/${id}`, userData),
   delete: (id) => api.delete(`/users/${id}`),
+  getAdmins: () => api.get('/users/admins'),
   getTechnicians: (params) => api.get('/users/teknisi', { params }),
   getProfile: () => api.get('/users/profile'),
   updateProfile: (userData) => api.put('/users/profile', userData),

@@ -6,6 +6,8 @@ const emptyForm = {
   nama: '',
   email: '',
   password: '',
+  confirmPassword: '',
+  role: 'TEKNISI',
   noHp: '',
   areaKerja: '',
   alamat: '',
@@ -15,18 +17,18 @@ const emptyForm = {
 
 const emptyPasswordForm = { newPassword: '', confirmPassword: '' };
 
-function normalizeTechnician(technician) {
-  const profile = technician.teknisi || technician.technician || {};
-  const userSource = technician.user || {};
-  const nama = technician.nama || technician.name || userSource.nama || userSource.name || '';
-  const email = technician.email || userSource.email || '';
+function normalizeUser(user) {
+  const profile = user.teknisi || user.technician || {};
+  const userSource = user.user || {};
+  const nama = user.nama || user.name || userSource.nama || userSource.name || '';
+  const email = user.email || userSource.email || '';
   const noHp =
     profile.noHp ||
     profile.no_hp ||
     profile.phone ||
-    technician.noHp ||
-    technician.no_hp ||
-    technician.phone ||
+    user.noHp ||
+    user.no_hp ||
+    user.phone ||
     userSource.noHp ||
     userSource.no_hp ||
     userSource.phone ||
@@ -34,18 +36,18 @@ function normalizeTechnician(technician) {
   const areaKerja =
     profile.areaKerja ||
     profile.area_kerja ||
-    technician.areaKerja ||
-    technician.area_kerja ||
-    technician.area ||
+    user.areaKerja ||
+    user.area_kerja ||
+    user.area ||
     userSource.areaKerja ||
     userSource.area_kerja ||
     '';
-  const alamat = profile.alamat || technician.alamat || technician.address || userSource.alamat || '';
-  const latitude = profile.latitude ?? technician.latitude ?? userSource.latitude ?? '';
-  const longitude = profile.longitude ?? technician.longitude ?? userSource.longitude ?? '';
+  const alamat = profile.alamat || user.alamat || user.address || userSource.alamat || '';
+  const latitude = profile.latitude ?? user.latitude ?? userSource.latitude ?? '';
+  const longitude = profile.longitude ?? user.longitude ?? userSource.longitude ?? '';
 
   return {
-    ...technician,
+    ...user,
     nama,
     email,
     noHp,
@@ -53,8 +55,9 @@ function normalizeTechnician(technician) {
     alamat,
     latitude,
     longitude,
-    isActive: technician.isActive ?? userSource.isActive ?? true,
-    createdAt: technician.createdAt || userSource.createdAt || '',
+    isActive: user.isActive ?? userSource.isActive ?? true,
+    createdAt: user.createdAt || userSource.createdAt || '',
+    role: (user.roles && user.roles[0]) || user.role || 'TEKNISI',
   };
 }
 
@@ -71,6 +74,7 @@ function validateTechnicianForm(form, includePassword = false) {
   if (!form.email.trim()) return 'Email wajib diisi.';
   if (!validateEmail(form.email)) return 'Format email tidak valid.';
   if (includePassword && form.password && form.password.length < 8) return 'Password minimal 8 karakter.';
+  if (includePassword && form.password && form.password !== form.confirmPassword) return 'Konfirmasi password tidak sama.';
   if (form.noHp && !/^[0-9+\-\s()]+$/.test(form.noHp)) return 'Nomor HP hanya boleh berisi angka dan simbol +.';
   if (form.latitude !== '' && Number.isNaN(Number(form.latitude))) return 'Latitude harus berupa angka.';
   if (form.longitude !== '' && Number.isNaN(Number(form.longitude))) return 'Longitude harus berupa angka.';
@@ -88,16 +92,31 @@ function buildPayload(form, mode = 'update') {
     longitude: form.longitude === '' ? null : Number(form.longitude),
   };
 
-  if (mode === 'create') {
-    payload.roles = ['TEKNISI'];
-    if (form.password) payload.password = form.password;
+  if (form.role) {
+    payload.roles = [form.role];
+  }
+
+  if (mode === 'create' && form.password) {
+    payload.password = form.password;
   }
 
   return payload;
 }
 
 export default function UsersPage() {
-  const { data, loading, error, refetch } = useFetch(userAPI.getTechnicians);
+  const [activeTab, setActiveTab] = useState('admins');
+  const {
+    data: adminData,
+    loading: loadingAdmins,
+    error: adminError,
+    refetch: refetchAdmins,
+  } = useFetch(userAPI.getAdmins);
+  const {
+    data: technicianData,
+    loading: loadingTechnicians,
+    error: technicianError,
+    refetch: refetchTechnicians,
+  } = useFetch(userAPI.getTechnicians);
   const createMutation = useMutation(userAPI.create);
   const updateMutation = useMutation(userAPI.update);
   const resetPasswordMutation = useMutation(authAPI.resetUserPassword);
@@ -109,83 +128,95 @@ export default function UsersPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [selectedTechnician, setSelectedTechnician] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [passwordForm, setPasswordForm] = useState(emptyPasswordForm);
   const [toast, setToast] = useState(null);
+  const [formError, setFormError] = useState(null);
   const [temporaryPassword, setTemporaryPassword] = useState(null);
 
-  const technicians = useMemo(() => (data?.data || data || []).map(normalizeTechnician), [data]);
+  const users = useMemo(() => {
+    const raw = activeTab === 'admins' ? (adminData?.data || adminData || []) : (technicianData?.data || technicianData || []);
+    return raw.map(normalizeUser);
+  }, [activeTab, adminData, technicianData]);
+
+  const loading = activeTab === 'admins' ? loadingAdmins : loadingTechnicians;
+  const error = activeTab === 'admins' ? adminError : technicianError;
+  const refetchCurrent = activeTab === 'admins' ? refetchAdmins : refetchTechnicians;
 
   const areas = useMemo(() => {
-    const values = technicians.map((technician) => technician.areaKerja).filter(Boolean);
+    const values = users.map((item) => item.areaKerja).filter(Boolean);
     return [...new Set(values)];
-  }, [technicians]);
+  }, [users]);
 
-  const filteredTechnicians = useMemo(() => {
+  const filteredUsers = useMemo(() => {
     const keyword = search.trim().toLowerCase();
 
-    return technicians.filter((technician) => {
+    return users.filter((item) => {
       const searchable = [
-        technician.nama,
-        technician.email,
-        technician.noHp,
-        technician.areaKerja,
-        technician.alamat,
+        item.nama,
+        item.email,
+        item.noHp,
+        item.areaKerja,
+        item.alamat,
       ]
         .join(' ')
         .toLowerCase();
 
-      return (!keyword || searchable.includes(keyword)) && (areaFilter === 'all' || technician.areaKerja === areaFilter);
+      return (!keyword || searchable.includes(keyword)) && (areaFilter === 'all' || item.areaKerja === areaFilter);
     });
-  }, [areaFilter, search, technicians]);
+  }, [areaFilter, search, users]);
 
   const summary = useMemo(() => {
-    const active = technicians.filter((technician) => technician.isActive).length;
-    const withCoordinate = technicians.filter((technician) => technician.latitude !== '' && technician.longitude !== '').length;
+    const active = users.filter((item) => item.isActive).length;
+    const withCoordinate = users.filter((item) => item.latitude !== '' && item.longitude !== '').length;
 
     return [
-      { label: 'Total Teknisi', value: technicians.length },
+      { label: activeTab === 'admins' ? 'Total Admin' : 'Total Teknisi', value: users.length },
       { label: 'Aktif', value: active },
       { label: 'Area Kerja', value: areas.length },
       { label: 'Koordinat', value: withCoordinate },
     ];
-  }, [areas.length, technicians]);
+  }, [activeTab, areas.length, users]);
 
   const isSubmitting =
     createMutation.loading || updateMutation.loading || resetPasswordMutation.loading || disableMutation.loading;
 
   const openCreateModal = () => {
-    setForm(emptyForm);
+    setForm({ ...emptyForm, role: activeTab === 'admins' ? 'ADMIN' : 'TEKNISI' });
     setCreateOpen(true);
+    setFormError(null);
     setToast(null);
   };
 
-  const openEditModal = (technician) => {
-    setSelectedTechnician(technician);
+  const openEditModal = (user) => {
+    setSelectedUser(user);
     setForm({
-      nama: technician.nama || '',
-      email: technician.email || '',
+      nama: user.nama || '',
+      email: user.email || '',
+      role: user.role || (activeTab === 'admins' ? 'ADMIN' : 'TEKNISI'),
       password: '',
-      noHp: technician.noHp || '',
-      areaKerja: technician.areaKerja || '',
-      alamat: technician.alamat || '',
-      latitude: technician.latitude ?? '',
-      longitude: technician.longitude ?? '',
+      confirmPassword: '',
+      noHp: user.noHp || '',
+      areaKerja: user.areaKerja || '',
+      alamat: user.alamat || '',
+      latitude: user.latitude ?? '',
+      longitude: user.longitude ?? '',
     });
     setEditOpen(true);
+    setFormError(null);
     setToast(null);
   };
 
-  const openResetModal = (technician) => {
-    setSelectedTechnician(technician);
+  const openResetModal = (user) => {
+    setSelectedUser(user);
     setPasswordForm(emptyPasswordForm);
     setResetOpen(true);
     setToast(null);
   };
 
-  const openDeleteModal = (technician) => {
-    setSelectedTechnician(technician);
+  const openDeleteModal = (user) => {
+    setSelectedUser(user);
     setDeleteOpen(true);
     setToast(null);
   };
@@ -193,6 +224,7 @@ export default function UsersPage() {
   const handleFormChange = (event) => {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+    setFormError(null);
   };
 
   const handlePasswordChange = (event) => {
@@ -204,19 +236,19 @@ export default function UsersPage() {
     event.preventDefault();
     const validationError = validateTechnicianForm(form, true);
     if (validationError) {
-      setToast({ tone: 'error', message: validationError });
+      setFormError(validationError);
       return;
     }
 
     try {
       const response = await createMutation.mutate(buildPayload(form, 'create'));
       setCreateOpen(false);
-      setForm(emptyForm);
-      setToast({ tone: 'success', message: getResponseMessage(response, 'Teknisi berhasil dibuat.') });
+      setForm({ ...emptyForm, role: activeTab === 'admins' ? 'ADMIN' : 'TEKNISI' });
+      setToast({ tone: 'success', message: getResponseMessage(response, 'User berhasil dibuat.') });
       if (response?.temporaryPassword) setTemporaryPassword(response.temporaryPassword);
-      refetch();
+      refetchCurrent();
     } catch (err) {
-      setToast({ tone: 'error', message: err?.message || 'Gagal membuat teknisi.' });
+      setToast({ tone: 'error', message: err?.message || 'Gagal membuat user.' });
     }
   };
 
@@ -224,18 +256,18 @@ export default function UsersPage() {
     event.preventDefault();
     const validationError = validateTechnicianForm(form);
     if (validationError) {
-      setToast({ tone: 'error', message: validationError });
+      setFormError(validationError);
       return;
     }
 
     try {
-      const response = await updateMutation.mutate(selectedTechnician.id, buildPayload(form));
+      const response = await updateMutation.mutate(selectedUser.id, buildPayload(form));
       setEditOpen(false);
-      setSelectedTechnician(null);
-      setToast({ tone: 'success', message: getResponseMessage(response, 'Data teknisi berhasil diperbarui.') });
-      refetch();
+      setSelectedUser(null);
+      setToast({ tone: 'success', message: getResponseMessage(response, 'Data user berhasil diperbarui.') });
+      refetchCurrent();
     } catch (err) {
-      setToast({ tone: 'error', message: err?.message || 'Gagal memperbarui teknisi.' });
+      setToast({ tone: 'error', message: err?.message || 'Gagal memperbarui user.' });
     }
   };
 
@@ -255,24 +287,24 @@ export default function UsersPage() {
     }
 
     try {
-      const response = await resetPasswordMutation.mutate(selectedTechnician.id, passwordForm.newPassword);
+      const response = await resetPasswordMutation.mutate(selectedUser.id, passwordForm.newPassword);
       setResetOpen(false);
       setPasswordForm(emptyPasswordForm);
-      setToast({ tone: 'success', message: getResponseMessage(response, 'Password teknisi berhasil direset.') });
+      setToast({ tone: 'success', message: getResponseMessage(response, 'Password user berhasil direset.') });
     } catch (err) {
-      setToast({ tone: 'error', message: err?.message || 'Gagal reset password teknisi.' });
+      setToast({ tone: 'error', message: err?.message || 'Gagal reset password user.' });
     }
   };
 
   const handleDisable = async () => {
     try {
-      const response = await disableMutation.mutate(selectedTechnician.id);
+      const response = await disableMutation.mutate(selectedUser.id);
       setDeleteOpen(false);
-      setSelectedTechnician(null);
-      setToast({ tone: 'success', message: getResponseMessage(response, 'Teknisi berhasil dinonaktifkan.') });
-      refetch();
+      setSelectedUser(null);
+      setToast({ tone: 'success', message: getResponseMessage(response, 'User berhasil dinonaktifkan.') });
+      refetchCurrent();
     } catch (err) {
-      setToast({ tone: 'error', message: err?.message || 'Gagal menonaktifkan teknisi.' });
+      setToast({ tone: 'error', message: err?.message || 'Gagal menonaktifkan user.' });
     }
   };
 
@@ -282,13 +314,39 @@ export default function UsersPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">Super Admin</p>
-            <h2 className="mt-1 text-2xl font-semibold text-slate-950">Management Teknisi</h2>
+            <h2 className="mt-1 text-2xl font-semibold text-slate-950">
+              Manajemen {activeTab === 'admins' ? 'Admin' : 'Teknisi'}
+            </h2>
             <p className="mt-2 text-sm text-slate-500">
-              Kelola akun teknisi, area kerja, koordinat, reset password, dan status akun.
+              Kelola akun {activeTab === 'admins' ? 'ADMIN/SUPER_ADMIN' : 'TEKNISI'}, area kerja, reset password, dan status akun.
             </p>
           </div>
           <button onClick={openCreateModal} className={primaryButtonClass}>
-            Tambah Teknisi
+            Tambah {activeTab === 'admins' ? 'Admin' : 'Teknisi'}
+          </button>
+        </div>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => setActiveTab('admins')}
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+              activeTab === 'admins'
+                ? 'bg-blue-600 text-white'
+                : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            Admins
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('technicians')}
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+              activeTab === 'technicians'
+                ? 'bg-blue-600 text-white'
+                : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            Technicians
           </button>
         </div>
       </section>
@@ -320,23 +378,29 @@ export default function UsersPage() {
               </option>
             ))}
           </select>
-          <button onClick={refetch} className={secondaryButtonClass}>
+          <button onClick={refetchCurrent} className={secondaryButtonClass}>
             Refresh
           </button>
         </div>
 
         <div className="mt-5 overflow-x-auto">
           {loading ? (
-            <EmptyState title="Memuat teknisi..." description="Data teknisi sedang diambil dari server." />
+            <EmptyState
+              title={`Memuat ${activeTab === 'admins' ? 'admin' : 'teknisi'}...`}
+              description={`Data ${activeTab === 'admins' ? 'admin' : 'teknisi'} sedang diambil dari server.`}
+            />
           ) : error ? (
             <EmptyState
-              title={error.statusCode === 403 ? 'Akses ditolak' : 'Gagal memuat teknisi'}
-              description={error.message || 'Terjadi kesalahan saat memuat teknisi.'}
+              title={error.statusCode === 403 ? 'Akses ditolak' : `Gagal memuat ${activeTab === 'admins' ? 'admin' : 'teknisi'}`}
+              description={error.message || 'Terjadi kesalahan saat memuat data.'}
               tone="error"
             />
-          ) : !technicians.length ? (
-            <EmptyState title="Belum ada teknisi" description="Teknisi yang dibuat akan muncul di tabel ini." />
-          ) : !filteredTechnicians.length ? (
+          ) : !users.length ? (
+            <EmptyState
+              title={`Belum ada ${activeTab === 'admins' ? 'admin' : 'teknisi'}`}
+              description={`${activeTab === 'admins' ? 'Admin' : 'Teknisi'} yang dibuat akan muncul di tabel ini.`}
+            />
+          ) : !filteredUsers.length ? (
             <EmptyState title="Tidak ada hasil" description="Coba ubah kata kunci atau filter area." />
           ) : (
             <table className="w-full min-w-[1120px] table-fixed divide-y divide-slate-200 text-left text-sm">
@@ -365,35 +429,35 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
-                {filteredTechnicians.map((technician) => (
-                  <tr key={technician.id || technician.email} className="align-top">
+                {filteredUsers.map((user) => (
+                  <tr key={user.id || user.email} className="align-top">
                     <td className={tdClass}>
-                      <p className="font-semibold text-slate-950">{technician.nama || '-'}</p>
+                      <p className="font-semibold text-slate-950">{user.nama || '-'}</p>
                     </td>
-                    <td className={breakAllTdClass}>{technician.email || '-'}</td>
-                    <td className={tdClass}>{technician.noHp || '-'}</td>
-                    <td className={tdClass}>{technician.areaKerja || '-'}</td>
-                    <td className={tdClass}>{technician.alamat || '-'}</td>
-                    <td className={breakAllTdClass}>{formatCoordinate(technician.latitude, technician.longitude)}</td>
+                    <td className={breakAllTdClass}>{user.email || '-'}</td>
+                    <td className={tdClass}>{user.noHp || '-'}</td>
+                    <td className={tdClass}>{user.areaKerja || '-'}</td>
+                    <td className={tdClass}>{user.alamat || '-'}</td>
+                    <td className={breakAllTdClass}>{formatCoordinate(user.latitude, user.longitude)}</td>
                     <td className={nowrapTdClass}>
                       <span
                         className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                          technician.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                          user.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
                         }`}
                       >
-                        {technician.isActive ? 'Aktif' : 'Nonaktif'}
+                        {user.isActive ? 'Aktif' : 'Nonaktif'}
                       </span>
                     </td>
-                    <td className={tdClass}>{formatDate(technician.createdAt)}</td>
+                    <td className={tdClass}>{formatDate(user.createdAt)}</td>
                     <td className={tdClass}>
                       <div className="flex flex-wrap gap-2">
-                        <button onClick={() => openEditModal(technician)} className={tableButtonClass}>
+                        <button onClick={() => openEditModal(user)} className={tableButtonClass}>
                           Edit
                         </button>
-                        <button onClick={() => openResetModal(technician)} className={tableButtonClass}>
+                        <button onClick={() => openResetModal(user)} className={tableButtonClass}>
                           Reset
                         </button>
-                        <button onClick={() => openDeleteModal(technician)} className={dangerButtonClass}>
+                        <button onClick={() => openDeleteModal(user)} className={dangerButtonClass}>
                           Nonaktifkan
                         </button>
                       </div>
@@ -407,12 +471,13 @@ export default function UsersPage() {
       </section>
 
       {createOpen && (
-        <TechnicianModal
-          title="Tambah Teknisi"
-          submitLabel="Simpan Teknisi"
+        <UserModal
+          title={`Tambah ${activeTab === 'admins' ? 'Admin' : 'Teknisi'}`}
+          submitLabel={`Simpan ${activeTab === 'admins' ? 'Admin' : 'Teknisi'}`}
           form={form}
           includePassword
           loading={createMutation.loading}
+          formError={formError}
           onChange={handleFormChange}
           onClose={() => setCreateOpen(false)}
           onSubmit={handleCreate}
@@ -420,11 +485,12 @@ export default function UsersPage() {
       )}
 
       {editOpen && (
-        <TechnicianModal
-          title="Edit Teknisi"
+        <UserModal
+          title={`Edit ${activeTab === 'admins' ? 'Admin' : 'Teknisi'}`}
           submitLabel="Simpan Perubahan"
           form={form}
           loading={updateMutation.loading}
+          formError={formError}
           onChange={handleFormChange}
           onClose={() => setEditOpen(false)}
           onSubmit={handleUpdate}
@@ -432,7 +498,7 @@ export default function UsersPage() {
       )}
 
       {resetOpen && (
-        <Modal title={`Reset Password ${selectedTechnician?.nama || 'Teknisi'}`} onClose={() => setResetOpen(false)}>
+        <Modal title={`Reset Password ${selectedUser?.nama || 'User'}`} onClose={() => setResetOpen(false)}>
           <form onSubmit={handleResetPassword} className="space-y-4">
             <Field label="Password baru">
               <input
@@ -462,10 +528,10 @@ export default function UsersPage() {
       )}
 
       {deleteOpen && (
-        <Modal title="Nonaktifkan Teknisi" onClose={() => setDeleteOpen(false)}>
+        <Modal title={`Nonaktifkan ${activeTab === 'admins' ? 'Admin' : 'Teknisi'}`} onClose={() => setDeleteOpen(false)}>
           <p className="text-sm leading-6 text-slate-600">
-            Akun <span className="font-semibold text-slate-950">{selectedTechnician?.nama || '-'}</span> akan
-            dinonaktifkan dan tidak muncul lagi pada daftar teknisi aktif.
+            Akun <span className="font-semibold text-slate-950">{selectedUser?.nama || '-'}</span> akan
+            dinonaktifkan dan tidak muncul lagi pada daftar {activeTab === 'admins' ? 'admin' : 'teknisi'} aktif.
           </p>
           <div className="mt-5 flex justify-end gap-3">
             <button onClick={() => setDeleteOpen(false)} className={secondaryButtonClass} disabled={isSubmitting}>
@@ -495,10 +561,30 @@ export default function UsersPage() {
   );
 }
 
-function TechnicianModal({ title, submitLabel, form, includePassword = false, loading, onChange, onClose, onSubmit }) {
+function UserModal({ title, submitLabel, form, includePassword = false, loading, formError, onChange, onClose, onSubmit }) {
+  const [showPassword, setShowPassword] = useState(false);
+  const roleOptions = [
+    { value: 'TEKNISI', label: 'Teknisi' },
+    { value: 'ADMIN', label: 'Admin' },
+    { value: 'SUPER_ADMIN', label: 'Super Admin' },
+  ];
+
+  const passwordError = includePassword
+    ? form.password && form.password.length > 0 && form.password.length < 8
+      ? 'Password minimal 8 karakter.'
+      : form.confirmPassword && form.password !== form.confirmPassword
+      ? 'Konfirmasi password tidak sama.'
+      : ''
+    : '';
+
   return (
     <Modal title={title} onClose={onClose}>
       <form onSubmit={onSubmit} className="space-y-4">
+        {formError && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {formError}
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Nama">
             <input name="nama" value={form.nama} onChange={onChange} className={inputClass} required />
@@ -508,28 +594,65 @@ function TechnicianModal({ title, submitLabel, form, includePassword = false, lo
           </Field>
         </div>
         {includePassword && (
-          <Field label="Password">
-            <input
-              type="password"
-              name="password"
-              value={form.password}
-              onChange={onChange}
-              className={inputClass}
-              placeholder="Kosongkan untuk password sementara"
-            />
-          </Field>
+          <>
+            <Field label="Password">
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  value={form.password}
+                  onChange={onChange}
+                  className={`${inputClass} pr-24`}
+                  placeholder="Kosongkan untuk password sementara"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </Field>
+            <Field label="Konfirmasi Password">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="confirmPassword"
+                value={form.confirmPassword}
+                onChange={onChange}
+                className={inputClass}
+                placeholder="Ulangi password"
+              />
+              {passwordError && <p className="mt-2 text-sm text-rose-600">{passwordError}</p>}
+            </Field>
+          </>
         )}
         <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Role">
+            <select name="role" value={form.role} onChange={onChange} className={inputClass}>
+              {roleOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label="Nomor HP">
             <input name="noHp" value={form.noHp} onChange={onChange} className={inputClass} placeholder="08..." />
           </Field>
-          <Field label="Area kerja">
-            <input name="areaKerja" value={form.areaKerja} onChange={onChange} className={inputClass} />
-          </Field>
         </div>
-        <Field label="Alamat">
-          <textarea name="alamat" value={form.alamat} onChange={onChange} rows="3" className={inputClass} />
-        </Field>
+        {(form.role === 'TEKNISI' || !form.role) && (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Area kerja">
+                <input name="areaKerja" value={form.areaKerja} onChange={onChange} className={inputClass} />
+              </Field>
+              <Field label="Alamat">
+                <textarea name="alamat" value={form.alamat} onChange={onChange} rows="3" className={inputClass} />
+              </Field>
+            </div>
+          </>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Latitude">
             <input name="latitude" value={form.latitude} onChange={onChange} className={inputClass} placeholder="-6.2" />
