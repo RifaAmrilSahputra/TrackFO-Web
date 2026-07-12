@@ -35,9 +35,11 @@ export default function IssuesPage() {
   const { data, loading, error, refetch } = useFetch(issueAPI.getAll);
   const { mutate, loading: creating, error: createError } = useMutation(issueAPI.create);
   const {
-    data: areaData,
+    data: technicianData,
+    loading: loadingAreas,
+    error: areaError,
     refetch: refetchArea,
-  } = useFetch(userAPI.getAreas);
+  } = useFetch(userAPI.getTechnicians);
 
   const [form, setForm] = useState(initialForm);
   const [message, setMessage] = useState('');
@@ -68,7 +70,18 @@ export default function IssuesPage() {
     return [...new Set(statuses)];
   }, [issues]);
 
-  const areaOptions = areaData?.data || [];
+  const areaOptions = useMemo(() => {
+    const technicians = technicianData?.data || technicianData || [];
+
+    if (!Array.isArray(technicians)) return [];
+
+    return [...new Set(
+      technicians
+        .map((technician) => technician.areaKerja || technician.area_kerja || technician.area)
+        .filter((area) => typeof area === 'string' && area.trim())
+        .map((area) => area.trim())
+    )].sort((firstArea, secondArea) => firstArea.localeCompare(secondArea, 'id'));
+  }, [technicianData]);
 
   const filteredIssues = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -312,7 +325,11 @@ export default function IssuesPage() {
                 disabled={!areaOptions.length}
               >
                 <option value="">
-                  {areaOptions.length ? 'Pilih Area' : 'Memuat Area...'}
+                  {areaOptions.length
+                    ? 'Pilih Area'
+                    : loadingAreas
+                      ? 'Memuat Area...'
+                      : 'Area belum tersedia'}
                 </option>
 
                 {areaOptions.map((area) => (
@@ -324,6 +341,11 @@ export default function IssuesPage() {
                   </option>
                 ))}
               </select>
+              {areaError && (
+                <p className="mt-2 text-xs text-rose-600">
+                  Gagal memuat area. Silakan muat ulang halaman.
+                </p>
+              )}
             </Field>
 
             <Field label="Alamat">
