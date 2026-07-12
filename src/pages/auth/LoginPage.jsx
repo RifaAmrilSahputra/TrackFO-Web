@@ -78,7 +78,7 @@ export default function LoginPage() {
           <div className="px-6 pb-6 pt-2">
             <div className="mb-2 text-center">
               <div className="text-3xl font-bold text-blue-600">TrackFO</div>
-              <div className="mt-1 text-slate-600">Login</div>
+              <div className="mt-1 text-slate-600">login</div>
             </div>
 
             {(formError || error || successMessage) && (
