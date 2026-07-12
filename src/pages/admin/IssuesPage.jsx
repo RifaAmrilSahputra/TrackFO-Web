@@ -35,11 +35,11 @@ export default function IssuesPage() {
   const { data, loading, error, refetch } = useFetch(issueAPI.getAll);
   const { mutate, loading: creating, error: createError } = useMutation(issueAPI.create);
   const {
-    data: technicianData,
+    data: areaData,
     loading: loadingAreas,
     error: areaError,
     refetch: refetchArea,
-  } = useFetch(userAPI.getTechnicians);
+  } = useFetch(userAPI.getAreas);
 
   const [form, setForm] = useState(initialForm);
   const [message, setMessage] = useState('');
@@ -71,17 +71,16 @@ export default function IssuesPage() {
   }, [issues]);
 
   const areaOptions = useMemo(() => {
-    const technicians = technicianData?.data || technicianData || [];
+    const areas = areaData?.data || areaData || [];
 
-    if (!Array.isArray(technicians)) return [];
+    if (!Array.isArray(areas)) return [];
 
     return [...new Set(
-      technicians
-        .map((technician) => technician.areaKerja || technician.area_kerja || technician.area)
+      areas
         .filter((area) => typeof area === 'string' && area.trim())
         .map((area) => area.trim())
     )].sort((firstArea, secondArea) => firstArea.localeCompare(secondArea, 'id'));
-  }, [technicianData]);
+  }, [areaData]);
 
   const filteredIssues = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -181,7 +180,7 @@ export default function IssuesPage() {
             <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-700">
               Operations
             </span>
-            <h2 className="mt-4 text-3xl font-semibold text-slate-950">Kelola Gangguan</h2>
+            <h2 className="mt-4 text-3xl font-semibold text-slate-950">Kelolaa Gangguan</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
               Prioritaskan laporan masuk, pantau status penanganan, dan buat gangguan baru untuk tim lapangan.
             </p>
