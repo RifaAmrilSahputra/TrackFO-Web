@@ -1,0 +1,82 @@
+**Ringkasan implementasi FE (singkat & actionable)**
+
+- **Tujuan:** Tampilkan pergerakan teknisi secara realtime di peta (lihat marker bergerak dari titik ke titik).
+- **Teknologi rekomendasi:** Socket.IO (realtime), Leaflet (peta), optional: `leaflet-moving-marker` atau plugin serupa untuk animasi halus.
+
+**File / perubahan utama**
+- Buat/ubah: `public/map.html` (contoh page)  
+- Buat: `public/js/map.js` (koneksi Socket.IO + logika marker)
+- Pastikan backend menyajikan static files atau frontend host terpisah; gunakan `socket.io` client via `/socket.io/socket.io.js` atau CDN.
+
+**Langkah implementasi singkat**
+1. Load map (Leaflet) dan inisialisasi view/tiles.
+2. Buka koneksi Socket.IO: `const socket = io()` (sesuaikan origin jika berbeda).
+3. Simpan struktur state per teknisi: markers dan polylines.
+4. Saat menerima event `tracking:update`, tambahkan titik ke polyline dan animasikan marker ke posisi baru (interpolasi atau plugin).
+5. Option: gunakan rooms per `gangguan:{id}` agar klien hanya menerima update relevan.
+
+**Contoh minimal frontend**
+- `public/map.html` (skeleton)
+```html
+<!doctype html>
+<html>
+<head>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <style>#map{height:100vh}</style>
+</head>
+<body>
+  <div id="map"></div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="/js/map.js"></script>
+</body>
+</html>
+```
+
+- `public/js/map.js`
+```js
+const socket = io(); // or io('https://api.example.com')
+const map = L.map('map').setView([2.656258, 99.682996], 16);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+const markers = {};   // { teknisiId: L.Marker }
+const paths = {};     // { teknisiId: L.Polyline }
+
+function animateMarker(marker, toLatLng, steps=20, ms=300) {
+  const from = marker.getLatLng();
+  let i=0;
+  const step = () => {
+    i++;
+    const lat = from.lat + (toLatLng.lat - from.lat) * (i/steps);
+    const lng = from.lng + (toLatLng.lng - from.lng) * (i/steps);
+    marker.setLatLng([lat,lng]);
+    if (i<steps) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+socket.on('tracking:update', (p) => {
+  const id = String(p.teknisiId);
+  const latlng = L.latLng(p.latitude, p.longitude);
+
+  if (!markers[id]) {
+    markers[id] = L.marker(latlng).addTo(map);
+    paths[id] = L.polyline([latlng], { color: 'blue' }).addTo(map);
+  } else {
+    paths[id].addLatLng(latlng);
+    animateMarker(markers[id], latlng);
+  }
+});
+```
+
+**Praktik penting**
+- **Auth:** Kirim token saat connect (`io({ auth: { token } })`) dan verifikasi di server (`io.use(...)`).
+- **Rooms:** Join room spesifik (mis. `socket.join('gangguan:123')`) sehingga server emit ke room jika ingin batasi klien.
+- **Throttling & smoothing:** Backend emit hanya ketika jarak > threshold (sudah ada). Di FE, jika update sangat sering, batasi update UI (throttle) atau gunakan interpolation.
+- **Reconnection & buffering:** Tangani reconnect, dan saat reconnect minta snapshot terakhir (GET `/api/tracking`) untuk sinkronisasi.
+- **Fallback:** Sediakan polling singkat (2–5s) atau SSE jika WebSocket diblokir.
+- **Skalabilitas:** Untuk multi-instance server gunakan `socket.io-redis` adapter.
+
+Jika mau, saya bisa:
+- Tambahkan file contoh `public/map.html` + `public/js/map.js` ke repo dan konfigurasi serve static di backend.
+- Atau buat versi dengan plugin `movingMarker` agar animasi lebih mulus. Mau saya tambahkan contoh file ke repo sekarang?

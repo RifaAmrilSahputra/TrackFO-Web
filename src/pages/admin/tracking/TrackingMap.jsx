@@ -73,12 +73,43 @@ function getDistanceColor(distanceKm) {
   return "#ef4444"; // merah
 }
 
+function getRoutePositions(item) {
+  const routeArray =
+    item.history ||
+    item.locationHistory ||
+    item.route ||
+    item.positions ||
+    item.points ||
+    item.locations ||
+    [];
+
+  if (!Array.isArray(routeArray)) return [];
+
+  return routeArray
+    .map((point) => {
+      if (!point) return null;
+      if (Array.isArray(point) && point.length >= 2) {
+        return [Number(point[0]), Number(point[1])];
+      }
+      if (point.latitude != null && point.longitude != null) {
+        return [Number(point.latitude), Number(point.longitude)];
+      }
+      if (point.lat != null && point.lng != null) {
+        return [Number(point.lat), Number(point.lng)];
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
 export default function TrackingMap({
   gangguan,
   teknisi = [],
   selectedTechnician,
   history = [],
 }) {
+
+  const selectedTechnicianId = selectedTechnician?.teknisiId;
 
   const center = useMemo(() => {
 
@@ -223,6 +254,13 @@ export default function TrackingMap({
               item.location.latitude &&
               item.location.longitude;
 
+            const routePositions = getRoutePositions(item);
+            const showRouteLine = routePositions.length > 1;
+            const routeColor =
+              String(item.teknisiId) === String(selectedTechnicianId)
+                ? "#2563eb"
+                : "#94a3b8";
+
             return (
 
               <Fragment key={item.teknisiId}>
@@ -237,6 +275,18 @@ export default function TrackingMap({
                       color: getDistanceColor(item.distance),
                       weight: 3,
                       dashArray: "6, 8",
+                    }}
+                  />
+                )}
+
+                {showRouteLine && (
+                  <Polyline
+                    positions={routePositions}
+                    pathOptions={{
+                      color: routeColor,
+                      weight: 3,
+                      dashArray: "8, 8",
+                      opacity: 0.8,
                     }}
                   />
                 )}

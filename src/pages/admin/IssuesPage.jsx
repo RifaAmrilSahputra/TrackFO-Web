@@ -457,20 +457,7 @@ function IssueCard({ issue, onUpdateStatus }) {
           <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
         </div>
 
-        <div className="flex shrink-0 flex-wrap gap-2 md:justify-end">
-          <button
-            onClick={() => onUpdateStatus(issue.id, 'on_progress')}
-            className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
-          >
-            In Progress
-          </button>
-          <button
-            onClick={() => onUpdateStatus(issue.id, 'done')}
-            className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
-          >
-            Resolved
-          </button>
-        </div>
+
       </div>
 
       <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 text-sm text-slate-600 sm:grid-cols-3">
@@ -536,6 +523,12 @@ function normalize(value) {
 }
 
 function formatLabel(value) {
+  const normalized = String(value || 'Unknown').toLowerCase();
+
+  if (['done', 'resolved'].includes(normalized)) {
+    return 'Selesai';
+  }
+
   return String(value || 'Unknown').replace(/_/g, ' ');
 }
 

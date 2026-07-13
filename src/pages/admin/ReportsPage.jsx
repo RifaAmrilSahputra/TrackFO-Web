@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useFetch } from '../../hooks/useAPI';
 import { reportAPI } from '../../services/apiClient';
 
@@ -14,15 +14,8 @@ const statusStyles = {
 
 export default function ReportsPage() {
   const { data, loading, error, refetch } = useFetch(reportAPI.getAll);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
 
   const reports = useMemo(() => data?.data || [], [data]);
-
-  const statusOptions = useMemo(() => {
-    const statuses = reports.map((report) => report.status).filter(Boolean);
-    return [...new Set(statuses)];
-  }, [reports]);
 
   const summary = useMemo(() => {
     const total = reports.length;
@@ -38,23 +31,6 @@ export default function ReportsPage() {
     ];
   }, [reports]);
 
-  const filteredReports = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    return reports.filter((report) => {
-      const reportId = report.id || '';
-      const issueId = report.gangguanId || report.issueId || report.gangguan_id || '';
-      const status = report.status || 'Belum ditentukan';
-      const notes = report.catatan || report.notes || report.description || '';
-      const technician = report.teknisi?.user?.name || report.technician?.name || report.teknisiName || '';
-      const searchable = `${reportId} ${issueId} ${status} ${notes} ${technician}`.toLowerCase();
-
-      const matchesSearch = !keyword || searchable.includes(keyword);
-      const matchesStatus = statusFilter === 'all' || normalize(status) === normalize(statusFilter);
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [reports, search, statusFilter]);
 
   return (
     <div className="max-w-full space-y-6 overflow-hidden">
@@ -85,36 +61,20 @@ export default function ReportsPage() {
       </section>
 
       <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex min-w-0 flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h3 className="text-lg font-semibold text-slate-950">Daftar Laporan</h3>
             <p className="mt-1 text-sm text-slate-500">
-              {filteredReports.length} dari {reports.length} laporan ditampilkan.
+              {reports.length} laporan ditampilkan.
             </p>
           </div>
 
-          <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px]">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari report, gangguan, catatan..."
-              className={controlClass}
-            />
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={controlClass}>
-              <option value="all">Semua status</option>
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {formatLabel(status)}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={refetch}
-              className="h-10 w-full rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
-              Refresh
-            </button>
-          </div>
+          <button
+            onClick={refetch}
+            className="inline-flex h-10 items-center justify-center rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
+          >
+            Refresh
+          </button>
         </div>
 
         <div className="mt-5">
@@ -124,11 +84,9 @@ export default function ReportsPage() {
             <EmptyState title="Gagal memuat laporan" description={error.message || 'Terjadi kesalahan saat memuat laporan.'} tone="error" />
           ) : !reports.length ? (
             <EmptyState title="Belum ada laporan" description="Laporan teknisi akan muncul di daftar ini." />
-          ) : !filteredReports.length ? (
-            <EmptyState title="Tidak ada hasil" description="Coba ubah kata kunci atau filter status." />
           ) : (
             <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-              {filteredReports.map((report) => (
+              {reports.map((report) => (
                 <ReportCard key={report.id} report={report} />
               ))}
             </div>
@@ -139,9 +97,6 @@ export default function ReportsPage() {
   );
 }
 
-const controlClass =
-  'h-10 min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100';
-
 function ReportCard({ report }) {
   const reportId = report.id || '-';
   const issueId = report.gangguanId || report.issueId || report.gangguan_id || '-';
@@ -151,15 +106,19 @@ function ReportCard({ report }) {
   const createdAt = report.createdAt || report.created_at || report.timestamp || report.time;
 
   return (
-    <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-blue-200 hover:shadow-md">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
+    <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">Report {reportId}</span>
             <Badge value={status} />
           </div>
-          <h4 className="mt-3 font-semibold text-slate-950">Gangguan ID: {issueId}</h4>
-          <p className="mt-1 text-sm leading-6 text-slate-600">{notes}</p>
+          <span className="text-xs font-medium text-slate-400">{createdAt ? formatDate(createdAt) : 'Belum tersedia'}</span>
+        </div>
+
+        <div className="min-w-0">
+          <h4 className="font-semibold text-slate-950">Gangguan ID: {issueId}</h4>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{notes}</p>
         </div>
       </div>
 
